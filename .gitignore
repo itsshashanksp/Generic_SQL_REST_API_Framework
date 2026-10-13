@@ -55,6 +55,7 @@ config/authorization.json
 config/api-keys.json
 config/database-state.json
 config/application-runtime-state.json
+config/access-scopes.json
 !config/auth.example.json
 !config/installation.example.json
 !config/admin.example.json

@@ -9,8 +9,8 @@ Unless a section says otherwise, request-shape failures are HTTP 400
 `INVALID_REQUEST` and execution failures are HTTP 500 `QUERY_ERROR`.
 
 Every action is authenticated according to the configured API mode and
-authorized by the caller's role permissions before validation; there is no
-per-table, per-routine, or per-resource registration. See
+authorized by the caller's role permissions before validation, then limited by
+the caller's [access scopes](Access-Scopes.md) before any query runs. See
 [Authentication and authorization](Authentication-and-Authorization.md). Session
 and frontend-user actions are in that document, and Admin actions are in
 [Admin Console](Admin-Console.md).

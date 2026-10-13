@@ -1,6 +1,6 @@
 {
   "version": 4,
-  "publicRoles": ["read-only"],
+  "publicRoles": [],
   "legacyApiKeyRoles": ["read-only"],
   "roles": {
     "read-only": {"name": "Read Only", "domain": "backend", "permissions": ["data.read", "metadata.read", "sql.execute", "routine.execute"]},

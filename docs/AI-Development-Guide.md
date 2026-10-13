@@ -121,9 +121,11 @@ logs, backups without explicit protected handling, fixtures, or commits.
 - Managed `gsk_` secrets are revealed once and stored only as hashes.
 - Request fields never grant roles, frontend access, or permissions. Resolve the
   current server-side principal.
-- Authorization is role permission only and identical for every authentication
-  method. Do not add per-table, per-routine, or per-resource registries or
-  scopes; the database login's permissions are the data boundary.
+- Authorization is role permission plus [access scopes](Access-Scopes.md),
+  identical for every authentication method. Enforce new data paths through the
+  shared scope checks (AccessScopeGate and the scoped metadata lookups); never
+  rely on the frontend. The database login's permissions remain a second
+  boundary.
 - Application Administrator is a frontend role and grants no Backend Admin
   Console authority. Preserve last-enabled-System-Administrator protection.
 - Authentication/authorization changes that affect a user must continue to

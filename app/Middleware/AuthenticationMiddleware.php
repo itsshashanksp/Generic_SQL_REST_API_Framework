@@ -64,6 +64,12 @@ final class AuthenticationMiddleware extends Middleware
 
         $mode = SecurityConfiguration::authenticationMode();
         if ($mode === 'none') {
+            if (!SecurityConfiguration::anonymousAuthenticationPermitted()) {
+                (new OperationalLogger())->warning('api', 'Anonymous API authentication refused in production', [
+                    'error_code' => 'AUTHENTICATION_UNAVAILABLE',
+                ]);
+                throw new ApiRequestException('Anonymous API access is disabled in production.', 'AUTHENTICATION_UNAVAILABLE', [], 503);
+            }
             $_SERVER['GENERIC_AUTH_PROVIDER'] = 'none';
             $roles = $this->authorization->publicRoles();
             $role = $roles[0] ?? null;

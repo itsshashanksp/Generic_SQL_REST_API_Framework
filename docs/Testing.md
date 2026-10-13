@@ -14,7 +14,7 @@ php -n tests/run.php
 ```
 
 Both must pass: `-n` runs without any `php.ini`, which catches tests that depend
-on host settings. `tests/run.php` runs the 62 registered suites in order and
+on host settings. `tests/run.php` runs the 66 registered suites in order and
 stops at the first failure.
 
 Tests never write the deployment's state. Unless the caller sets them,

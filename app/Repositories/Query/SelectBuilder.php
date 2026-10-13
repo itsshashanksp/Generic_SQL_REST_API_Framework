@@ -1359,8 +1359,12 @@ if (
 
     } else {
 
-        // Allow SELECT *
+        // Allow SELECT * where every column of every source may be read.
         if ($column === "*") {
+            $this->metadataRepository->assertAllColumnsReadable($request['table']);
+            foreach ($request['joins'] ?? [] as $join) {
+                $this->metadataRepository->assertAllColumnsReadable($join['alias'] ?? $join['table']);
+            }
             continue;
         }
 

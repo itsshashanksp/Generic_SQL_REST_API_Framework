@@ -4,6 +4,8 @@ require_once __DIR__ . '/../Security/DatabaseConfigurationResolver.php';
 require_once __DIR__ . '/../Database/DatabaseRegistry.php';
 require_once __DIR__ . '/../Security/DatabaseTransportSecurity.php';
 require_once __DIR__ . '/../Configuration/RuntimeConfiguration.php';
+require_once __DIR__ . '/../Authorization/AccessScope/AccessScopeConfiguration.php';
+require_once __DIR__ . '/../Security/SecurityConfiguration.php';
 
 final class ProductionValidator
 {
@@ -44,6 +46,8 @@ final class ProductionValidator
                     'reason' => 'No authorized live SQL Server target was supplied.'],
                 'databaseTransport' => $this->databaseTransport(),
                 'runtimeConfiguration' => $this->runtimeConfigurationLocation(),
+                'anonymousAuthentication' => $this->anonymousAuthentication(),
+                'accessScopes' => $this->accessScopes(),
                 'tls' => ['status' => extension_loaded('openssl') ? self::PARTIAL : self::NOT_EXECUTED,
                     'reason' => 'Cryptographic capability does not validate a deployed certificate, hostname, or HTTPS binding.'],
             ],
@@ -171,6 +175,36 @@ final class ProductionValidator
         }
         return ['status' => self::OPERATOR, 'location' => 'inside_code_tree',
             'reason' => 'Set GENERIC_RUNTIME_CONFIG_DIR to a directory outside the code tree so Backend/config can stay read-only for the PHP worker.'];
+    }
+
+    private function anonymousAuthentication(): array
+    {
+        try {
+            $mode = SecurityConfiguration::authenticationMode();
+        } catch (Throwable $exception) {
+            return ['status' => self::NOT_EXECUTED, 'reason' => 'Authentication configuration could not be read.'];
+        }
+        if ($mode !== 'none') return ['status' => self::VALIDATED, 'mode' => $mode];
+        return [
+            'status' => self::OPERATOR,
+            'mode' => $mode,
+            'optIn' => getenv('GENERIC_ALLOW_ANONYMOUS_PRODUCTION') === 'true',
+            'reason' => 'Anonymous mode is refused in production unless GENERIC_ALLOW_ANONYMOUS_PRODUCTION=true is an approved exception.',
+        ];
+    }
+
+    /** Access scopes must be configured and enforced before production is fail-closed by design. */
+    private function accessScopes(): array
+    {
+        $configuration = AccessScopeConfiguration::load(null, true);
+        if ($configuration->state !== AccessScopeConfiguration::STATE_CONFIGURED) {
+            return ['status' => self::OPERATOR, 'state' => $configuration->state,
+                'reason' => 'Scoped data actions are denied until a valid access-scopes.json exists.'];
+        }
+        return $configuration->enforced()
+            ? ['status' => self::VALIDATED, 'state' => $configuration->state, 'mode' => $configuration->mode]
+            : ['status' => self::OPERATOR, 'state' => $configuration->state, 'mode' => $configuration->mode,
+                'reason' => 'Log-only mode records would-be denials; switch to enforce after the scopes are reviewed.'];
     }
 
     private function extensionStates(): array

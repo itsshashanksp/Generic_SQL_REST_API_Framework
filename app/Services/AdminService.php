@@ -504,6 +504,12 @@ final class AdminService
 
     public function saveAuthentication(string $mode): array
     {
+        if ($mode === 'none' && !SecurityConfiguration::anonymousAuthenticationPermitted()) {
+            throw new ApiRequestException('Invalid request.', 'INVALID_REQUEST', [[
+                'path' => 'mode',
+                'message' => 'Anonymous authentication is disabled in production. Set GENERIC_ALLOW_ANONYMOUS_PRODUCTION=true only for an approved exceptional deployment.',
+            ]]);
+        }
         $result = $this->configuration->update(function (array &$settings) use ($mode): array {
             $settings['authentication']['mode'] = $mode;
             return [

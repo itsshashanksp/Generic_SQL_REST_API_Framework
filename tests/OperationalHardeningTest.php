@@ -30,6 +30,29 @@ function hardeningRemove(string $path): void
     @rmdir($path);
 }
 
+function hardeningCopy(string $from, string $to): void
+{
+    if (!is_dir($from)) { copy($from, $to); return; }
+    if (!is_dir($to)) mkdir($to, 0700, true);
+    foreach (scandir($from) ?: [] as $entry) {
+        if ($entry !== '.' && $entry !== '..') hardeningCopy($from . DIRECTORY_SEPARATOR . $entry, $to . DIRECTORY_SEPARATOR . $entry);
+    }
+}
+
+/** Names and hashes of a directory's files, or null when it does not exist. */
+function hardeningSnapshot(string $path): ?array
+{
+    if (!is_dir($path)) return null;
+    $files = [];
+    foreach (scandir($path) ?: [] as $entry) {
+        if ($entry === '.' || $entry === '..') continue;
+        $file = $path . DIRECTORY_SEPARATOR . $entry;
+        $files[$entry] = is_file($file) ? sha1_file($file) . ':' . decoct(fileperms($file) & 0777) : 'dir';
+    }
+    ksort($files);
+    return $files;
+}
+
 /** Run api/health.php in an isolated PHP process for one request path. */
 function hardeningHealth(string $uri, string $directory): array
 {
@@ -62,6 +85,13 @@ function hardeningHealth(string $uri, string $directory): array
 
 $root = dirname(__DIR__);
 $directory = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'generic-operational-hardening-' . bin2hex(random_bytes(8));
+// The validator bootstraps missing runtime files in the directory it inspects,
+// so its runtime-location cases use a temporary code tree (holding the
+// deployment templates it validates) and never the real Backend/config or a
+// directory beside the repository.
+$validatorRoot = $directory . DIRECTORY_SEPARATOR . 'code-tree';
+$realConfigBefore = hardeningSnapshot($root . DIRECTORY_SEPARATOR . 'config');
+$realSiblingBefore = hardeningSnapshot($root . '-sibling');
 
 try {
     // SAOH-03: the database starts disconnected, so readiness must be 503 at
@@ -87,24 +117,29 @@ try {
     }
 
     // SAOH-01: the validation report flags runtime state inside the code tree
-    // without printing any path.
+    // without printing any path. Without an override, the runtime directory is
+    // the code tree's config directory (checked without bootstrapping it).
     putenv('GENERIC_RUNTIME_CONFIG_DIR');
-    $inside = (new ProductionValidator($root))->report()['environment']['runtimeConfiguration'];
+    hardeningAssert(str_replace('\\', '/', RuntimeConfiguration::directory()) === str_replace('\\', '/', $root . '/config'),
+        'The default runtime directory is not the code tree config directory.');
+    hardeningCopy($root . DIRECTORY_SEPARATOR . 'deployment', $validatorRoot . DIRECTORY_SEPARATOR . 'deployment');
+    putenv('GENERIC_RUNTIME_CONFIG_DIR=' . $validatorRoot . DIRECTORY_SEPARATOR . 'config');
+    $inside = (new ProductionValidator($validatorRoot))->report()['environment']['runtimeConfiguration'];
     hardeningAssert($inside['status'] === ProductionValidator::OPERATOR && $inside['location'] === 'inside_code_tree',
         'The validator accepted runtime configuration inside the code tree.');
-    putenv('GENERIC_RUNTIME_CONFIG_DIR=' . $root . DIRECTORY_SEPARATOR . 'config');
-    $explicit = (new ProductionValidator($root))->report()['environment']['runtimeConfiguration'];
-    hardeningAssert($explicit['location'] === 'inside_code_tree', 'An explicit Backend/config runtime directory was accepted.');
-    putenv('GENERIC_RUNTIME_CONFIG_DIR=' . $directory);
-    $outside = (new ProductionValidator($root))->report()['environment']['runtimeConfiguration'];
+    putenv('GENERIC_RUNTIME_CONFIG_DIR=' . $validatorRoot . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR);
+    $explicit = (new ProductionValidator($validatorRoot))->report()['environment']['runtimeConfiguration'];
+    hardeningAssert($explicit['location'] === 'inside_code_tree', 'An explicit code-tree config runtime directory was accepted.');
+    putenv('GENERIC_RUNTIME_CONFIG_DIR=' . $directory . DIRECTORY_SEPARATOR . 'state');
+    $outside = (new ProductionValidator($validatorRoot))->report()['environment']['runtimeConfiguration'];
     hardeningAssert($outside === ['status' => ProductionValidator::VALIDATED, 'location' => 'outside_code_tree'],
         'The validator rejected runtime configuration outside the code tree.');
-    putenv('GENERIC_RUNTIME_CONFIG_DIR=' . $root . '-sibling' . DIRECTORY_SEPARATOR . 'config');
-    hardeningAssert((new ProductionValidator($root))->report()['environment']['runtimeConfiguration']['location'] === 'outside_code_tree',
+    putenv('GENERIC_RUNTIME_CONFIG_DIR=' . $validatorRoot . '-sibling' . DIRECTORY_SEPARATOR . 'config');
+    hardeningAssert((new ProductionValidator($validatorRoot))->report()['environment']['runtimeConfiguration']['location'] === 'outside_code_tree',
         'A sibling directory sharing the code-tree prefix was treated as inside it.');
     putenv('GENERIC_RUNTIME_CONFIG_DIR');
     foreach ([$inside, $explicit, $outside] as $result) {
-        hardeningAssert(!str_contains(json_encode($result, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR), str_replace('\\', '/', $root))
+        hardeningAssert(!str_contains(json_encode($result, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR), str_replace('\\', '/', $validatorRoot))
             && !str_contains(json_encode($result, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR), $directory), 'The validator reported a filesystem path.');
     }
 
@@ -125,6 +160,13 @@ try {
         && str_contains($hosting, 'GENERIC_RUNTIME_CONFIG_DIR=<absolute path to a runtime state directory outside Backend')
         && !str_contains($hosting, 'GENERIC_RUNTIME_CONFIG_DIR=<absolute path to Backend/config>'),
         'Production hosting guidance places runtime state in Backend/config.');
+
+    // Regression: the runtime-location cases never touched the real code tree's
+    // config directory or created a directory beside the repository.
+    hardeningAssert(hardeningSnapshot($root . DIRECTORY_SEPARATOR . 'config') === $realConfigBefore,
+        'The test changed files in the real Backend/config directory.');
+    hardeningAssert(hardeningSnapshot($root . '-sibling') === $realSiblingBefore,
+        'The test created or changed a directory beside the repository.');
 
     echo "Operational hardening tests passed.\n";
 } finally {

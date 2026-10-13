@@ -11,6 +11,9 @@ $tests = [
     __DIR__ . '/SqlResourceCapabilityTest.php',
     __DIR__ . '/SqlResourceFilteringTest.php',
     __DIR__ . '/SqlResourceDiscoveryTest.php',
+    __DIR__ . '/AccessScopeAuthorizationTest.php',
+    __DIR__ . '/AccessScopeRegressionTest.php',
+    __DIR__ . '/AccessScopeHttpEnforcementTest.php',
     __DIR__ . '/SqlParserGeneratorTest.php',
     __DIR__ . '/SqlParserAssetUrlTest.php',
     __DIR__ . '/QueryExecutionIsolationTest.php',
@@ -61,6 +64,7 @@ $tests = [
     __DIR__ . '/ProductionHostingTest.php',
     __DIR__ . '/HttpsSecurityTest.php',
     __DIR__ . '/OperationalHardeningTest.php',
+    __DIR__ . '/TestIsolationRegressionTest.php',
     __DIR__ . '/StaticSecurityRemediationTest.php',
     __DIR__ . '/RepositoryDocumentationTest.php'
 ];

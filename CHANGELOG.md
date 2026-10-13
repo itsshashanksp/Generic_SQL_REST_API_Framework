@@ -5,6 +5,30 @@ Planned work is in [docs/Roadmap.md](docs/Roadmap.md).
 
 ## [Unreleased]
 
+### Security
+
+- **Access scopes** (`config/access-scopes.json`) limit each role, and every
+  principal with frontend access, to approved databases, tables, columns, SQL
+  Resources with their filter columns, and metadata operations, enforced before
+  execution for direct API requests. `log-only` and `enforce` modes support a
+  reviewed rollout; production fails closed when the file is missing or
+  invalid. See [Access scopes](docs/Access-Scopes.md).
+- `union`, `unionAll`, and `metadata.*` are denied to frontend users unless a
+  scope grants them; routines and writes need an explicitly unrestricted scope.
+- Read Only accounts created through frontend user management receive no
+  backend role (only `frontend.read`). Existing accounts are reported by
+  `scripts/report-frontend-reader-accounts.php` for migration.
+- Anonymous (`none`) authentication is refused in production unless
+  `GENERIC_ALLOW_ANONYMOUS_PRODUCTION=true`; `publicRoles` now defaults to none.
+- Out-of-scope callers receive the same `403 AUTHORIZATION_DENIED` whether a
+  database they name is unregistered, disabled, unavailable, or not granted:
+  the scope check now runs before the database availability gate.
+- New read-only operator scripts: `validate-access-scopes.php` (reports
+  whether a valid file is complete and lists grants that need review; exit 4
+  for unregistered databases or missing SQL Resources),
+  `generate-access-scope-draft.php` (minimal column lists, with hidden filter
+  columns listed for review), and `check-database-privileges.php`.
+
 ### Changed
 
 - **Admin Console: Configuration → Database removed.** The **Databases** page

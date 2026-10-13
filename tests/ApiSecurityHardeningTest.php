@@ -188,7 +188,8 @@ try {
         foreach ([[], [RoleModel::READ_ONLY], [RoleModel::DATA_OPERATOR]] as $roles) $authorizationRepository->validate([$field => $roles] + $defaults);
     }
     $authorizationRepository->validate($defaults);
-    hardeningAssert($defaults['publicRoles'] === [RoleModel::READ_ONLY] && $defaults['legacyApiKeyRoles'] === [RoleModel::READ_ONLY],
+    // Anonymous principals hold no role by default (Phase 4 / F-01).
+    hardeningAssert($defaults['publicRoles'] === [] && $defaults['legacyApiKeyRoles'] === [RoleModel::READ_ONLY],
         'Anonymous or legacy-key defaults are no longer least privilege.');
 
     $repository = new AuthRepository(RuntimeConfiguration::path(RuntimeConfiguration::AUTH_FILE));

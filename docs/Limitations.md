@@ -15,8 +15,8 @@ Planned work is tracked separately in [Roadmap](Roadmap.md).
   (`CROSS_DATABASE_QUERY_NOT_SUPPORTED`);
 - writes or routine calls against more than one database, cross-database write
   sources, and distributed transactions;
-- per-database (or per-table/column) authorization: role permissions apply to
-  every registered database; the database login's grants are the boundary;
+- per-user or row-level authorization: [access scopes](Access-Scopes.md) are
+  assigned per role (and to frontend users), not per individual account or row;
 - persistent connections or connection pools: each request opens its own
   connection;
 - literal database-qualified names in SQL Resources (use
@@ -44,12 +44,12 @@ before production use.
   can manage frontend-only access but cannot assign backend roles.
 - CORS uses exact validated backend origins; it is not itself access control.
 - The endpoint accepts POST and OPTIONS only.
-- Authorization is by role permission only. There is no per-table, per-column,
-  per-routine, or per-SQL-Resource authorization in the API: a principal with
-  `data.read` can query any table or view of any registered database that the
-  database login can read, and `data.write` can change any table the login can
-  write (ST-003). Restrict data exposure with the database login's own
-  permissions, least-privilege views, and SQL Resources.
+- [Access scopes](Access-Scopes.md) limit databases, tables, columns, SQL
+  Resources, filter columns, and metadata per role, but only when configured
+  and enforced; in log-only mode or with an unrestricted scope a principal with
+  `data.read` can still query any table the database login can read, and
+  `data.write` can change any table the login can write (ST-003). Keep the
+  database login least-privileged as the second boundary.
 - The data API addresses only user objects of registered databases: system
   schemas, client-written database-qualified names, and system procedures are
   rejected. SELECT and set-operation requests can combine databases of one

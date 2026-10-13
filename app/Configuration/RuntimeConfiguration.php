@@ -14,6 +14,7 @@ final class RuntimeConfiguration
     public const API_KEYS_FILE = 'api-keys.json';
     public const DATABASE_STATE_FILE = 'database-state.json';
     public const APPLICATION_RUNTIME_STATE_FILE = 'application-runtime-state.json';
+    public const ACCESS_SCOPES_FILE = 'access-scopes.json';
 
     public static function directory(): string
     {
@@ -27,7 +28,7 @@ final class RuntimeConfiguration
     {
         if (!in_array($file, [self::AUTH_FILE, self::INSTALLATION_FILE, self::ADMIN_FILE,
             self::AUTHORIZATION_FILE, self::API_KEYS_FILE, self::DATABASE_STATE_FILE,
-            self::APPLICATION_RUNTIME_STATE_FILE], true)) {
+            self::APPLICATION_RUNTIME_STATE_FILE, self::ACCESS_SCOPES_FILE], true)) {
             throw new InvalidArgumentException('Unsupported runtime configuration file.');
         }
         return self::directory() . DIRECTORY_SEPARATOR . $file;
@@ -73,7 +74,8 @@ final class RuntimeConfiguration
     {
         return [
             'version' => 4,
-            'publicRoles' => ['read-only'],
+            // Anonymous mode grants nothing unless a deployment assigns roles.
+            'publicRoles' => [],
             'legacyApiKeyRoles' => ['read-only'],
             'roles' => [
                 'read-only' => ['name' => 'Read Only', 'domain' => 'backend', 'permissions' => ['data.read', 'metadata.read', 'sql.execute', 'routine.execute']],

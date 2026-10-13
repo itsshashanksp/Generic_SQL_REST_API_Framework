@@ -72,6 +72,7 @@ require_once __DIR__ . '/../app/Requests/QueryRequestNormalizer.php';
 require_once __DIR__ . '/../app/Database/DatabaseQueryPlanner.php';
 require_once __DIR__ . '/../app/Database/DatabaseQueryPlanContext.php';
 require_once __DIR__ . '/../app/Database/DatabaseDirectory.php';
+require_once __DIR__ . '/../app/Authorization/AccessScope/AccessScopeGate.php';
 require_once __DIR__ . '/../app/Requests/SetupRequestValidator.php';
 require_once __DIR__ . '/../app/Controllers/SetupController.php';
 require_once __DIR__ . '/../app/Requests/AuthRequestValidator.php';
@@ -151,6 +152,9 @@ if (in_array($publicRequest['action'] ?? null, $authActions, true)) {
 if (in_array($publicRequest['action'] ?? null,$frontendUserActions,true)){$request=(new FrontendUserRequestValidator())->validate($publicRequest);Response::setRequestContext(['action'=>$request['action']]);(new FrontendUserController())->dispatch($request);}
 
 (new AuthorizationMiddleware())->handle($publicRequest);
+// Access scopes, phase 0: before the availability gate can answer for a
+// database outside the caller's scope.
+$accessScope = AccessScopeGate::beforeAvailability($publicRequest);
 (new DatabaseAvailabilityMiddleware())->handle($publicRequest);
 
 $phaseStarted = microtime(true);
@@ -168,6 +172,9 @@ Response::setRequestContext($request);
     'action' => $publicRequest['action'] ?? null,
 ]);
 
+// Access scopes, phase 1 (see AccessScopeGate): before planning.
+AccessScopeGate::beforePlanning($publicRequest, authorizer: $accessScope);
+
 // Database planning: references → registry contexts → access policy → plan.
 // The database listing reads the registry only: no plan, no connection.
 $phaseStarted = microtime(true);
@@ -177,6 +184,9 @@ if (!DatabaseDirectory::isRegistryOnly($publicRequest['action'] ?? null)) {
 (new Logger())->timing('database_planning', (microtime(true) - $phaseStarted) * 1000, [
     'action' => $publicRequest['action'] ?? null,
 ]);
+
+// Access scopes, phase 2: after planning, before any query runs.
+AccessScopeGate::afterPlanning($publicRequest, DatabaseQueryPlanContext::current());
 
 // Validate Controller
 Validator::required($request, [

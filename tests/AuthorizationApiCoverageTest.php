@@ -459,10 +459,14 @@ try {
     coverageExpect(coverageRequest($api, '/', ['action' => 'select'], headers: $invalidKey), 401, 'AUTHENTICATION_REQUIRED', 'An invalid key alone was accepted.');
     coverageExpect(coverageRequest($api, '/', ['action' => 'select'], headers: $keyHeader($readKey)), 503, 'DATABASE_UNAVAILABLE', 'A valid key was refused in mixed mode.');
     // P1-21: mode none is least privilege.
+    // Anonymous principals hold no permission unless a deployment assigns publicRoles.
     $setMode('none');
-    coverageExpect(coverageRequest($api, '/', ['action' => 'select']), 503, 'DATABASE_UNAVAILABLE', 'Mode none refused anonymous reads.');
+    coverageExpect(coverageRequest($api, '/', ['action' => 'select']), 403, 'AUTHORIZATION_DENIED', 'Mode none granted anonymous reads by default.');
+    (new AuthorizationRepository())->save(['publicRoles' => [RoleModel::READ_ONLY]] + RuntimeConfiguration::authorizationDefaults());
+    coverageExpect(coverageRequest($api, '/', ['action' => 'select']), 503, 'DATABASE_UNAVAILABLE', 'Mode none refused anonymous reads assigned by publicRoles.');
     coverageExpect(coverageRequest($api, '/', ['action' => 'insert', 'table' => 'Customers']), 403, 'AUTHORIZATION_DENIED', 'Mode none allowed anonymous writes.');
     coverageExpect(coverageRequest($api, '/', ['action' => 'auth.frontendUsers.list']), 401, 'AUTHENTICATION_REQUIRED', 'Mode none exposed frontend user management.');
+    (new AuthorizationRepository())->save(RuntimeConfiguration::authorizationDefaults());
     $setMode('session');
 
     // P0-10: frontend user management requires frontend.users.manage.
@@ -504,6 +508,49 @@ try {
             400, 'INVALID_FRONTEND_USER_REQUEST', "Frontend user management accepted identity field {$field}.");
     }
     coverageAssert(password_verify('coverage-target-password', $repository->findUser('Coverage.Target')['passwordHash']), 'A rejected request changed a password.');
+    // F-01: a frontend-created Read Only user holds frontend access only;
+    // disabling or revoking it ends its live session and blocks login, and the
+    // frontend can still restore it without a backend role.
+    $appAdminHeaders = ['X-CSRF-Token' => $appAdminToken];
+    $lifecycleLogin = ['action' => 'auth.login', 'username' => 'Lifecycle.Reader', 'password' => 'lifecycle-reader-password'];
+    $lifecycleLoginRefused = function () use ($api, $lifecycleLogin): void {
+        $cookie = null;
+        $token = coverageRequest($api, '/', ['action' => 'auth.csrf'], $cookie)['json']['data'][0]['csrfToken'] ?? null;
+        coverageExpect(coverageRequest($api, '/', $lifecycleLogin, $cookie, ['X-CSRF-Token' => $token]), 401, null, 'A disabled frontend reader logged in.');
+    };
+    coverageExpect(coverageRequest($api, '/', ['action' => 'auth.frontendUsers.create', 'name' => 'Lifecycle Reader', 'username' => 'Lifecycle.Reader',
+        'mobile' => '+15551239999', 'email' => null, 'password' => 'lifecycle-reader-password', 'passwordConfirmation' => 'lifecycle-reader-password',
+        'role' => RoleModel::READ_ONLY], $appAdminCookie, $appAdminHeaders), 201, null, 'Application Administrator could not create a Read Only user.');
+    $lifecycle = $repository->findUser('Lifecycle.Reader');
+    coverageAssert($lifecycle['backendRole'] === null && $lifecycle['frontendAccess'] === true && $lifecycle['frontendRole'] === null,
+        'A frontend-created Read Only user received a backend role.');
+    [$lifecycleCookie, $lifecycleToken] = coverageLogin($api, '/', 'Lifecycle.Reader', 'lifecycle-reader-password');
+    coverageExpect(coverageRequest($api, '/', ['action' => 'select'], $lifecycleCookie), 503, 'DATABASE_UNAVAILABLE', 'A frontend reader could not read.');
+    coverageExpect(coverageRequest($api, '/', ['action' => 'procedure', 'source' => ['procedure' => 'AnyProcedure']], $lifecycleCookie, ['X-CSRF-Token' => $lifecycleToken]),
+        403, 'AUTHORIZATION_DENIED', 'A frontend reader reached a routine.');
+    coverageExpect(coverageRequest($api, '/', ['action' => 'auth.frontendUsers.disable', 'username' => 'Lifecycle.Reader'], $appAdminCookie, $appAdminHeaders),
+        200, null, 'Application Administrator could not disable a frontend reader.');
+    coverageExpect(coverageRequest($api, '/', ['action' => 'select'], $lifecycleCookie), 401, 'AUTHENTICATION_REQUIRED', 'A disabled reader session kept reading.');
+    $lifecycleLoginRefused();
+    coverageExpect(coverageRequest($api, '/', ['action' => 'auth.frontendUsers.enable', 'username' => 'Lifecycle.Reader'], $appAdminCookie, $appAdminHeaders),
+        200, null, 'Application Administrator could not re-enable a frontend reader.');
+    [$lifecycleCookie] = coverageLogin($api, '/', 'Lifecycle.Reader', 'lifecycle-reader-password');
+    coverageExpect(coverageRequest($api, '/', ['action' => 'auth.frontendUsers.assignRole', 'username' => 'Lifecycle.Reader', 'frontendAccess' => false, 'frontendRole' => null],
+        $appAdminCookie, $appAdminHeaders), 200, null, 'Application Administrator could not revoke a frontend reader.');
+    $lifecycle = $repository->findUser('Lifecycle.Reader');
+    coverageAssert($lifecycle['enabled'] === false && $lifecycle['frontendAccess'] === false && $lifecycle['backendRole'] === null,
+        'Revoking a frontend reader did not disable it without a role.');
+    coverageExpect(coverageRequest($api, '/', ['action' => 'select'], $lifecycleCookie), 401, 'AUTHENTICATION_REQUIRED', 'A revoked reader session kept reading.');
+    $lifecycleLoginRefused();
+    coverageExpect(coverageRequest($api, '/', ['action' => 'auth.frontendUsers.enable', 'username' => 'Lifecycle.Reader'], $appAdminCookie, $appAdminHeaders),
+        409, 'USER_ACCESS_REQUIRED', 'A revoked reader was re-enabled without access.');
+    coverageExpect(coverageRequest($api, '/', ['action' => 'auth.frontendUsers.assignRole', 'username' => 'Lifecycle.Reader', 'frontendAccess' => true, 'frontendRole' => null],
+        $appAdminCookie, $appAdminHeaders), 200, null, 'Application Administrator could not restore a revoked reader.');
+    coverageExpect(coverageRequest($api, '/', ['action' => 'auth.frontendUsers.enable', 'username' => 'Lifecycle.Reader'], $appAdminCookie, $appAdminHeaders),
+        200, null, 'Application Administrator could not re-enable a restored reader.');
+    coverageAssert($repository->findUser('Lifecycle.Reader')['backendRole'] === null, 'Restoring a reader granted a backend role.');
+    [$lifecycleCookie] = coverageLogin($api, '/', 'Lifecycle.Reader', 'lifecycle-reader-password');
+    coverageExpect(coverageRequest($api, '/', ['action' => 'select'], $lifecycleCookie), 503, 'DATABASE_UNAVAILABLE', 'A restored reader could not read.');
     // P2-17: username case variants cannot reach a System Administrator.
     foreach (['coverage.admin', 'COVERAGE.ADMIN', 'Coverage.ADMIN'] as $variant) {
         foreach ([['action' => 'auth.frontendUsers.changePassword', 'username' => $variant, 'newPassword' => 'case-variant-password', 'passwordConfirmation' => 'case-variant-password'],

@@ -91,13 +91,20 @@ $oldRuntime = getenv('GENERIC_RUNTIME_CONFIG_DIR');
 $oldEnvironment = getenv('GENERIC_APP_ENV');
 $oldOrigins = getenv('GENERIC_API_ALLOWED_ORIGINS');
 $oldKey = getenv(DatabaseCredentialEncryption::ENVIRONMENT_VARIABLE);
+// Default loggers and security storage must never reach the deployment's logs
+// or state, even when this file is run directly (tests/run.php isolates them
+// for the whole run; a direct run did not).
+$isolatedPaths = ['GENERIC_LOG_DIR' => $root . '/default-logs', 'GENERIC_OPERATIONAL_LOG_DIR' => $root . '/operational',
+    'GENERIC_SECURITY_STORAGE_DIR' => $root . '/security'];
+$oldIsolated = array_map(fn (string $name) => getenv($name), array_combine(array_keys($isolatedPaths), array_keys($isolatedPaths)));
 $oldRemoteAddress = $_SERVER['REMOTE_ADDR'] ?? null;
 $oldUserAgent = $_SERVER['HTTP_USER_AGENT'] ?? null;
 
 try {
-    foreach ([$root, $sessions, $logs, $resources] as $directory) {
+    foreach ([$root, $sessions, $logs, $resources, ...array_values($isolatedPaths)] as $directory) {
         if (!is_dir($directory)) mkdir($directory, 0700, true);
     }
+    foreach ($isolatedPaths as $name => $path) putenv($name . '=' . $path);
     ini_set('session.save_path', $sessions);
     putenv('GENERIC_RUNTIME_CONFIG_DIR=' . $runtime);
     putenv('GENERIC_APP_ENV=production');
@@ -525,6 +532,7 @@ try {
     $oldOrigins === false ? putenv('GENERIC_API_ALLOWED_ORIGINS') : putenv('GENERIC_API_ALLOWED_ORIGINS=' . $oldOrigins);
     $oldKey === false ? putenv(DatabaseCredentialEncryption::ENVIRONMENT_VARIABLE)
         : putenv(DatabaseCredentialEncryption::ENVIRONMENT_VARIABLE . '=' . $oldKey);
+    foreach ($oldIsolated as $name => $value) $value === false ? putenv($name) : putenv($name . '=' . $value);
     if ($oldRemoteAddress === null) unset($_SERVER['REMOTE_ADDR']); else $_SERVER['REMOTE_ADDR'] = $oldRemoteAddress;
     if ($oldUserAgent === null) unset($_SERVER['HTTP_USER_AGENT']); else $_SERVER['HTTP_USER_AGENT'] = $oldUserAgent;
     securityTestingRemove($root);

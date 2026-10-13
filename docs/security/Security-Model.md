@@ -75,8 +75,13 @@ returns `404 NOT_FOUND` before authentication.
 | `insert`, `update`, `delete`, `upsert` | API mode | `data.write` | Yes |
 | `metadata.*` | API mode | `metadata.read` or `frontend.read` | No |
 
+Every action above is then limited by the principal's
+[access scopes](../Access-Scopes.md): databases, tables, columns, SQL
+Resources, filter columns, and metadata operations, enforced before execution.
+
 *API mode* is `authentication.mode`: `none` creates an anonymous principal with
-`publicRoles`; `api_key` requires a valid `X-API-Key`; `session` requires a
+`publicRoles` (empty by default; refused in production without
+`GENERIC_ALLOW_ANONYMOUS_PRODUCTION=true`); `api_key` requires a valid `X-API-Key`; `session` requires a
 session; `session+api_key` accepts either. Actions beginning with `auth.` or
 `admin.` always require a session.
 

@@ -164,7 +164,9 @@ changes the outcome:
 | `function`, `tableFunction` | `routine.execute` |
 | `procedure` | `routine.execute` and `data.write` |
 
-There are no per-table, per-routine, or per-SQL-Resource registries or scopes.
+Role permissions select the kinds of action; [access scopes](Access-Scopes.md)
+then limit the databases, tables, columns, SQL Resources, filter columns, and
+metadata operations each request may use, before any query runs.
 After authorization, request validation, catalog checks, and prepared
 parameters keep SQL safe, and the database login's permissions bound what any
 request can reach. The Admin API is a separate management plane with its own

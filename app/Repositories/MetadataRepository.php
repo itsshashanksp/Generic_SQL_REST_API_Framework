@@ -343,6 +343,18 @@ class MetadataRepository
     }
 
     /**
+     * Called before a `*` projection of a table is rendered. A plain catalog
+     * repository has nothing to check; access-scope decorators override it.
+     */
+    public function assertAllColumnsReadable($table): void
+    {
+    }
+
+    public function assertAllObjectColumnsReadable(QualifiedObject $object): void
+    {
+    }
+
+    /**
      * Get Schema
      */
     public function schema()

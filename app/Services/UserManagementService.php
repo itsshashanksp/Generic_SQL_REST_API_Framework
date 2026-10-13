@@ -70,7 +70,12 @@ final class UserManagementService
         if (!in_array($role, FrontendCapabilityPolicy::assignableRoles(), true)) {
             throw new ApiRequestException('Invalid frontend user request.', 'INVALID_FRONTEND_USER_REQUEST');
         }
-        $backendRole = in_array($role, [RoleModel::READ_ONLY, RoleModel::DATA_OPERATOR], true) ? $role : null;
+        // A frontend "Read Only" account is a frontend reader: frontend access
+        // only, governed by the `frontend` access scope. It does not receive
+        // the backend read-only role (data.read, metadata.read, sql.execute,
+        // routine.execute). Accounts created before this rule keep their role
+        // until migrated (see docs/Access-Scopes.md).
+        $backendRole = $role === RoleModel::DATA_OPERATOR ? $role : null;
         $frontendRole = $role === RoleModel::APPLICATION_ADMINISTRATOR ? $role : null;
         [$name, $mobile, $email] = $this->validatedProfile($name, $mobile, $email);
         return $this->create($username, $password, $backendRole, true, $frontendRole, $enabled, true, $actor, $role, $name, $mobile, $email);

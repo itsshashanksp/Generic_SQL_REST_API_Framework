@@ -3,6 +3,8 @@
 require_once __DIR__ . '/../app/Runtime/ApplicationRuntimeManager.php';
 require_once __DIR__ . '/../app/Runtime/DatabaseAvailabilityManager.php';
 require_once __DIR__ . '/../app/Repositories/AdminConfigurationRepository.php';
+require_once __DIR__ . '/../app/Repositories/AuthorizationRepository.php';
+require_once __DIR__ . '/../app/Database/DatabaseContextResolver.php';
 
 /*
  * Exercises the real API, SQL Parser, and Admin entry points with
@@ -101,17 +103,21 @@ try {
     mkdir($configurationDirectory, 0700, true);
     putenv('GENERIC_RUNTIME_CONFIG_DIR=' . $configurationDirectory);
     RuntimeConfiguration::ensure();
-    // Normal API actions run without credentials so the database gate is reachable.
+    // Normal API actions run without credentials so the database gate is
+    // reachable: production anonymous access needs the explicit opt-in and
+    // public roles assigned by the deployment.
     (new AdminConfigurationRepository())->update(function (array &$settings): array {
         $settings['authentication']['mode'] = 'none';
         return [];
     });
+    (new AuthorizationRepository())->save(['publicRoles' => [RoleModel::READ_ONLY]] + RuntimeConfiguration::authorizationDefaults());
     $runtime = new ApplicationRuntimeManager(RuntimeConfiguration::path(RuntimeConfiguration::APPLICATION_RUNTIME_STATE_FILE));
     $database = new DatabaseAvailabilityManager(RuntimeConfiguration::path(RuntimeConfiguration::DATABASE_STATE_FILE));
     $environment = [
         'GENERIC_APP_ENV' => 'production',
         'GENERIC_RUNTIME_CONFIG_DIR' => $configurationDirectory,
         'GENERIC_ADMIN_ENABLED' => '0',
+        'GENERIC_ALLOW_ANONYMOUS_PRODUCTION' => 'true',
     ];
     [$servers['api'], $apiPort] = availabilityStartServer($root, 'api', $environment);
     [$servers['sqlparser'], $parserPort] = availabilityStartServer($root, 'sqlparser', $environment);
@@ -226,7 +232,19 @@ try {
     );
 
     // 7. Database availability is a separate gate from API availability.
+    // Production without an access scope file fails closed before that gate;
+    // an explicit enforced scope for this one request reaches it.
     $database->setAvailable(false);
+    $scopeDenied = availabilityHttp($apiPort, 'POST', '/', $select);
+    availabilityAssert(
+        $scopeDenied['status'] === 403 && ($scopeDenied['json']['error']['code'] ?? null) === 'AUTHORIZATION_DENIED',
+        'Production without access scopes did not fail closed.'
+    );
+    file_put_contents($configurationDirectory . '/access-scopes.json', json_encode(['version' => 1, 'mode' => 'enforce', 'scopes' => [
+        'read-only' => ['actions' => ['select'], 'databases' => [
+            ((new DatabaseContextResolver())->defaultDatabaseId() ?? 'default') => ['tables' => ['Items' => ['ItemCode']]],
+        ]],
+    ]]));
     $databaseClosed = availabilityHttp($apiPort, 'POST', '/', $select);
     availabilityAssert(
         $databaseClosed['status'] === 503

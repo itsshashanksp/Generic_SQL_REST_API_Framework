@@ -149,7 +149,7 @@ decision.
 | `metadata.read` | `metadata.*` |
 | `routine.execute` | `function`, `tableFunction` |
 | `routine.execute` + `data.write` | `procedure` (stored procedures may modify data) |
-| `frontend.read` | Reads, SQL Resources, and metadata for frontend users |
+| `frontend.read` | Reads and SQL Resources for frontend users, within the `frontend` [access scope](docs/Access-Scopes.md) |
 | `frontend.users.manage` | Frontend user management |
 | `admin.manage` | The Admin API |
 
@@ -219,8 +219,8 @@ authorization rules.
 
 SQL Resources are server-authored SQL files. `config/sql-resources.php` sets the
 discovery root (`queries/`) and the excluded directories (by default `system`).
-It is not an authorization registry: any caller with `sql.execute` or
-`frontend.read` can run every discovered resource. See
+It is not an authorization registry; which resources a caller may run, and
+with which filter columns, is set by [access scopes](docs/Access-Scopes.md). See
 [SQL Resource Mode](docs/SQL-Resource-Mode.md).
 
 ## Generic CRUD

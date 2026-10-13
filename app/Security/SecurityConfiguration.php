@@ -10,6 +10,15 @@ final class SecurityConfiguration
         return strtolower((string)(getenv('GENERIC_APP_ENV') ?: 'development')) === 'production';
     }
 
+    /**
+     * Anonymous (`none`) API authentication is refused in production unless
+     * the deployment explicitly opts in with GENERIC_ALLOW_ANONYMOUS_PRODUCTION=true.
+     */
+    public static function anonymousAuthenticationPermitted(): bool
+    {
+        return !self::isProduction() || getenv('GENERIC_ALLOW_ANONYMOUS_PRODUCTION') === 'true';
+    }
+
     public static function allowedOrigins(): array
     {
         $configured = trim((string)(getenv('GENERIC_API_ALLOWED_ORIGINS') ?: ''));

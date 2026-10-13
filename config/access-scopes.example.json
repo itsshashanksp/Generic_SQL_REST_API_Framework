@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "mode": "log-only",
+  "scopes": {
+    "frontend": {
+      "actions": ["select", "sql"],
+      "databases": {
+        "default": {
+          "tables": {
+            "Orders": ["OrderId", "OrderDate", "CustomerName", "Total"]
+          },
+          "resources": {
+            "reports/orders-by-month": { "filters": ["OrderDate"] }
+          }
+        }
+      }
+    }
+  }
+}

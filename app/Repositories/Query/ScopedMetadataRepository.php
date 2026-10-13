@@ -99,6 +99,18 @@ class ScopedMetadataRepository extends MetadataRepository
         ];
     }
 
+    /** CTE outputs come from an already-checked body; physical sources are forwarded. */
+    public function assertAllColumnsReadable($table): void
+    {
+        if ($this->findVirtualTable((string)$table) !== null) return;
+        $object = $this->physicalSource($table);
+        if ($object !== null) {
+            $this->delegate->assertAllObjectColumnsReadable($object);
+            return;
+        }
+        $this->delegate->assertAllColumnsReadable($this->tableName($table));
+    }
+
     /**
      * The object a source key needs an object lookup for: schema-qualified
      * sources and sources of another planned database. Sources of the

@@ -30,7 +30,7 @@ The normal API's mode is set in **Admin Console → Configuration → Security**
 
 | Mode | Behavior |
 |---|---|
-| `none` | Requests run as an anonymous principal with the configured `publicRoles` (default `read-only`) |
+| `none` | Requests run as an anonymous principal with the configured `publicRoles` (default: none). Refused in production unless `GENERIC_ALLOW_ANONYMOUS_PRODUCTION=true` ([details](Access-Scopes.md#anonymous-mode)) |
 | `session` | A valid session is required |
 | `api_key` | A valid `X-API-Key` is required |
 | `session+api_key` | Either a valid session or a valid key |
@@ -104,10 +104,10 @@ edited into unsafe combinations.
   screens, so frontend access never grants write permission.
 - Application Administrator never grants Admin Console, configuration,
   API-key, runtime-control, or backend-role access.
-- Authorization is decided by role permissions only, the same way for
-  sessions, API keys, the legacy key, and anonymous mode. There are no per-table,
-  per-routine, or per-SQL-Resource scopes; request validation, catalog checks,
-  prepared parameters, and the database login's permissions still apply.
+- Authorization is decided by role permissions and then
+  [access scopes](Access-Scopes.md), the same way for sessions, API keys, the
+  legacy key, and anonymous mode; request validation, catalog checks, prepared
+  parameters, and the database login's permissions still apply.
 
 The permission matrix and per-action minimum privileges are in
 [Security model](security/Security-Model.md#roles-and-permissions).
@@ -147,7 +147,10 @@ Served by the public API to sessions holding `frontend.users.manage`
 
 These actions manage only frontend-managed accounts: accounts with no backend
 role, or with a backend role the frontend may assign (currently `read-only`)
-together with frontend access. Accounts with `system-administrator`,
+together with frontend access. A **Read Only** account created here receives
+frontend access and no backend role, so it holds only `frontend.read` within the
+`frontend` scope; older accounts keep the backend `read-only` role until
+migrated ([Frontend users](Access-Scopes.md#frontend-users)). Accounts with `system-administrator`,
 `data-operator`, or backend-only `read-only` are refused for every actor with
 `403 AUTHORIZATION_DENIED`, and unknown accounts get a uniform not-found
 response. The request contract has no backend-role field. If frontend access is

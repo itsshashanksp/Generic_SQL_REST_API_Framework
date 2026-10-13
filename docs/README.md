@@ -44,6 +44,7 @@ the [changelog](../CHANGELOG.md). Start with the repository
 | [Upgrading to V3](Upgrading-to-V3.md) | V2 → V3 migration, compatibility changes, verification, rollback |
 | [Admin Console](Admin-Console.md) | Pages, availability controls, every Admin API action |
 | [Authentication and authorization](Authentication-and-Authorization.md) | Modes, sessions, API keys, roles, user management |
+| [Access scopes](Access-Scopes.md) | Per-role database, table, column, SQL Resource, filter, and metadata limits; rollout; least privilege |
 | [Runtime and performance controls](Runtime-and-Performance-Controls.md) | Timeouts, rate limits, sessions, request and page limits |
 | [Monitoring and health](Monitoring-and-Health.md) | Liveness, readiness, detailed health |
 | [Logging](Logging.md) | Operational and audit logs |

@@ -8,6 +8,8 @@ require_once __DIR__ . '/SetOperationBuilder.php';
 require_once __DIR__ . '/../Resources/RoutineResolver.php';
 require_once __DIR__ . '/../Database/DatabaseQueryPlanContext.php';
 require_once __DIR__ . '/../Database/SourceResolver.php';
+require_once __DIR__ . '/../Authorization/AccessScope/AccessScopeContext.php';
+require_once __DIR__ . '/Query/AuthorizingMetadataRepository.php';
 
 /** Public compatibility facade for query construction and execution. */
 class QueryRepository
@@ -33,6 +35,10 @@ class QueryRepository
         // Sources resolve within the request's database plan, when there is one.
         $plan = DatabaseQueryPlanContext::current();
         $sources ??= $plan === null ? null : new SourceResolver($plan);
+        $scopes = AccessScopeContext::current();
+        if ($scopes !== null && $plan !== null) {
+            $metadataRepository = new AuthorizingMetadataRepository($metadataRepository, $scopes, $plan->primaryDatabase->id);
+        }
         $this->sources = $sources;
         $this->selectBuilder = new SelectBuilder($this->queryEngine, $metadataRepository, $this->logger, $sources);
         $this->routineBuilder = new RoutineBuilder();

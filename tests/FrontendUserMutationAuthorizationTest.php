@@ -158,12 +158,23 @@ try {
     $service->setFrontendUserEnabled($admin, 'Created.Reader', false);
     $service->setFrontendUserEnabled($admin, 'Created.Reader', true);
     $reader = $repository->findUser('Created.Reader');
-    frontendMutationAssert($reader['backendRole'] === RoleModel::READ_ONLY && $reader['frontendAccess'] === true
+    // Frontend-created Read Only users hold frontend access only (Phase 4 / F-01).
+    frontendMutationAssert($reader['backendRole'] === null && $reader['frontendAccess'] === true
         && password_verify('replacement-reader-password', $reader['passwordHash']), 'Frontend Read Only user is no longer manageable.');
-    // Revoking frontend access leaves a backend-only account; only the Admin API manages it afterwards.
+    // A reader created before Phase 4 keeps the backend read-only role. Revoking
+    // its frontend access leaves a backend-only account that only the Admin API
+    // manages afterwards.
+    $service->createUser('Legacy.Reader', 'legacy-reader-password', RoleModel::READ_ONLY, true, null);
+    $service->assignFrontendAccess($admin, 'Legacy.Reader', false, null);
+    frontendMutationDenied(fn () => $service->assignFrontendAccess($admin, 'Legacy.Reader', true, null), 'Backend-only Read Only account regained access through the frontend path.');
+    frontendMutationDenied(fn () => $service->changeFrontendUserPassword($admin, 'Legacy.Reader', 'taken-over-password'), 'Backend-only Read Only account was taken over through the frontend path.');
+    // A Phase 4 reader has no backend role: revoking frontend access disables it
+    // and it stays a role-less frontend account (existing rule for accounts
+    // without a backend role), holding no permission until access is restored.
     $service->assignFrontendAccess($admin, 'Created.Reader', false, null);
-    frontendMutationDenied(fn () => $service->assignFrontendAccess($admin, 'Created.Reader', true, null), 'Backend-only Read Only account regained access through the frontend path.');
-    frontendMutationDenied(fn () => $service->changeFrontendUserPassword($admin, 'Created.Reader', 'taken-over-password'), 'Backend-only Read Only account was taken over through the frontend path.');
+    $revoked = $repository->findUser('Created.Reader');
+    frontendMutationAssert($revoked['frontendAccess'] === false && $revoked['enabled'] === false && $revoked['backendRole'] === null,
+        'Revoking a role-less reader did not disable it.');
 
     // Super Admin retains full frontend management over Admin accounts.
     $service->updateFrontendProfile($superAdmin, 'Peer.Owner', 'Managed Admin', 'Managed.Admin', '+15552345678', null);
