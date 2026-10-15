@@ -1,4 +1,3 @@
 SELECT
     SUM(Bill_Amt) AS TotalSales
 FROM BillMastTable
-WHERE Bill_Date BETWEEN 20210401 AND 20220331

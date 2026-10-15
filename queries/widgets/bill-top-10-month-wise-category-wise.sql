@@ -1,8 +1,7 @@
 WITH SalesData AS
 (
     SELECT
-        SUBSTRING(CONVERT(VARCHAR, BILL_DATE), 5, 2) + '/' +
-        SUBSTRING(CONVERT(VARCHAR, BILL_DATE), 1, 4) AS Month,
+        SUBSTRING(CONVERT(VARCHAR, BIL.Bill_Date), 5, 2) AS Month,
         CAT.Cat_Desc AS Category,
 
         ROUND(
@@ -18,18 +17,9 @@ WITH SalesData AS
 
     WHERE
         BIL.Cat_Code = CAT.Cat_Code
-        AND Bill_Date BETWEEN
-            CONVERT(NUMERIC,
-                CONVERT(VARCHAR, YEAR(GETDATE()) - 5) + '04' + '01'
-            )
-            AND
-            CONVERT(NUMERIC,
-                CONVERT(VARCHAR, YEAR(GETDATE()) - 5 + 1) + '03' + '31'
-            )
 
     GROUP BY
-        SUBSTRING(CONVERT(VARCHAR, BILL_DATE), 5, 2) + '/' +
-        SUBSTRING(CONVERT(VARCHAR, BILL_DATE), 1, 4),
+        SUBSTRING(CONVERT(VARCHAR, BIL.Bill_Date), 5, 2),
         CAT.Cat_Desc
 ),
 RankedData AS

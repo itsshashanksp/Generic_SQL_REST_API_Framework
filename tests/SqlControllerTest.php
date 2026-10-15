@@ -567,4 +567,58 @@ $response = Response::successPayload($controller->captured['data'], $controller-
 sqlAssert($response['success'] === true, 'SQL response was not standardized.');
 sqlAssert($response['meta']['page'] === 2 && $response['meta']['pageSize'] === 25, 'SQL response pagination metadata changed.');
 
+// Bill dashboard resources: the selected date range is the only date limit,
+// months combine across years, and the Bill TOP-10 filters inside its CTE.
+$billCatalog = new class extends MetadataRepository {
+    private array $types = [
+        'billdettable' => ['bill_date' => 'int', 'cat_code' => 'int', 'status' => 'char', 'item_value' => 'decimal'],
+        'categorytable' => ['cat_code' => 'int', 'cat_desc' => 'varchar'],
+        'purmasttable' => ['gin_date' => 'int', 'inv_value' => 'decimal'],
+    ];
+    public function __construct() {}
+    public function columnExists($table, $column) { return isset($this->types[strtolower($table)][strtolower($column)]); }
+    public function getColumnDataType($table, $column) { return $this->types[strtolower($table)][strtolower($column)] ?? null; }
+};
+foreach ($registry->discoverResourceIds() as $resourceId) {
+    if (!str_starts_with($resourceId, 'widgets/bill-')) continue;
+    sqlAssert(
+        !str_contains((string)file_get_contents($registry->resolve($resourceId)['file']), '20210401'),
+        "Bill resource {$resourceId} still limits itself to FY 2021-22."
+    );
+}
+$billCases = [
+    'widgets/bill-purchases-month-wise' => [['Month', 'Purchases'], 'GIN_Date', 'PurMastTable.GIN_Date'],
+    'widgets/bill-top-10-month-wise-category-wise' => [['Month', 'Category', 'Sales'], 'Bill_Date', 'BIL.Bill_Date'],
+];
+foreach ($billCases as $resource => [$columns, $field, $expression]) {
+    $billEngine = new SqlTestEngine();
+    (new SqlRepository($billEngine, $registry, null, $billCatalog))->execute($normalizer->normalize([
+        'action' => 'sql',
+        'resource' => $resource,
+        'execution' => ['columns' => $columns, 'filters' => [$field => ['placement' => 'source']]],
+        'filters' => [['field' => $field, 'type' => 'daterange', 'operator' => 'BETWEEN', 'value' => ['2021-04-01', '2022-03-31']]],
+        'sort' => [['field' => 'Month', 'direction' => 'DESC']],
+        'pagination' => ['page' => 1, 'pageSize' => 10],
+    ]));
+    $billQueries = array_values(array_filter($billEngine->executions, fn (array $entry): bool => !str_contains($entry['sql'], 'compatibility_level')));
+    sqlAssert(count($billQueries) === 2, "{$resource} did not run its count and data queries.");
+    foreach ($billQueries as $billQuery) {
+        $filterAt = strpos($billQuery['sql'], "({$expression}) BETWEEN ? AND ?");
+        sqlAssert(
+            $filterAt !== false
+                && $filterAt < strpos($billQuery['sql'], 'GROUP BY')
+                && $billQuery['params'] === [20210401, 20220331],
+            "{$resource} did not apply the selected range before aggregation."
+        );
+        sqlAssert(
+            !str_contains($billQuery['sql'], ', 1, 4)'),
+            "{$resource} still groups months by year."
+        );
+    }
+}
+sqlAssert(
+    strpos($billQueries[0]['sql'], '(BIL.Bill_Date) BETWEEN ? AND ?') < strpos($billQueries[0]['sql'], 'RankedData AS'),
+    'The Bill TOP-10 range was not placed in its SalesData CTE.'
+);
+
 echo "SQL controller tests passed.\n";

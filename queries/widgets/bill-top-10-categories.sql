@@ -5,6 +5,5 @@ FROM BillDetTable BIL, CategoryTable CAT
 WHERE
     BIL.Cat_Code = CAT.Cat_Code
     AND BIL.Bill_NETT > 0
-    AND BIL.Bill_Date BETWEEN 20210401 AND 20220331
 GROUP BY CAT.Cat_Desc
 ORDER BY Sales DESC

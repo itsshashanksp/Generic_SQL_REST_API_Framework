@@ -1,4 +1,3 @@
 SELECT
     SUM(Inv_Value) AS TotalPurchases
 FROM PurMastTable
-WHERE GIN_Date BETWEEN 20210401 AND 20220331
