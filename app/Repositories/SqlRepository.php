@@ -47,7 +47,7 @@ class SqlRepository
             $allowedColumns[strtolower($column)] = $column;
         }
         $allowedFilters = $definition['filters'];
-        $filtersByLocation = ['output' => [], 'source' => [], 'where' => [], 'having' => []];
+        $filtersByLocation = ['output' => [], 'source' => [], 'cte' => [], 'where' => [], 'having' => []];
         foreach ($request['filters'] ?? [] as $filter) {
             $filterDefinition = $this->requireAllowedFilterColumn($filter['field'], $allowedFilters);
             $semanticDate = in_array($filter['type'] ?? null, ['date', 'daterange'], true);
@@ -68,7 +68,9 @@ class SqlRepository
                 if ($source !== null) {
                     $filterDefinition = array_replace($filterDefinition, [
                         'expression' => $source['expression'],
-                        'location' => 'where',
+                        // A source reached through the main SELECT's CTE is
+                        // filtered inside that CTE (SqlResourceStatement::sourceCandidates).
+                        'location' => $source['cte'] === null ? 'where' : 'cte',
                         'mappedExpression' => true,
                         'physicalDataType' => $source['dataType'],
                     ]);
@@ -87,9 +89,16 @@ class SqlRepository
             throw new ApiRequestException(
                 'Runtime filters with OR must use one SQL location.',
                 'INVALID_SQL_RUNTIME_FILTER',
-                [['path' => 'filterLogic', 'message' => 'OR cannot span output, WHERE, and HAVING locations.']]
+                [['path' => 'filterLogic', 'message' => 'OR cannot span output, CTE, WHERE, and HAVING locations.']]
             );
         }
+        [$cteWhereSql, $cteParams] = $this->buildWhere(
+            $filtersByLocation['cte'],
+            $request['filterLogic'] ?? 'AND',
+            $allowedFilters,
+            null,
+            false
+        );
         [$mappedWhereSql, $whereParams] = $this->buildWhere(
             $filtersByLocation['where'],
             $request['filterLogic'] ?? 'AND',
@@ -109,8 +118,9 @@ class SqlRepository
             $request['filterLogic'] ?? 'AND',
             $allowedFilters
         );
-        $params = array_merge($whereParams, $havingParams, $outputParams);
-        $queryPrefix = $statement->prefix();
+        // The prefix (with its CTEs) precedes the main SELECT in every query.
+        $params = array_merge($cteParams, $whereParams, $havingParams, $outputParams);
+        $queryPrefix = $statement->prefixWithSourceFilter($cteWhereSql === '' ? null : $cteWhereSql);
         $sql = $statement->injectMappedFilters(
             $mappedWhereSql === '' ? null : $mappedWhereSql,
             $mappedHavingSql === '' ? null : $mappedHavingSql

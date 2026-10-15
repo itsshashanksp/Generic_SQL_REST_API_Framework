@@ -221,6 +221,14 @@ class SqlResourceStatement
         if (preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $column) !== 1) {
             return [];
         }
+        // A main SELECT that reads one CTE has no physical source of its own;
+        // candidates come from the CTE its chain leads to (`cte` names it).
+        if (!$requireDirectProjection && ($cte = $this->sourceFilterCte()) !== null) {
+            return $cte['statement'] === null ? [] : array_map(
+                fn (array $candidate): array => ['cte' => $cte['name']] + $candidate,
+                $cte['statement']->sourceCandidates($column)
+            );
+        }
 
         $tokens = self::topLevelTokens($this->analysisBody);
         $fromIndex = null;
@@ -253,6 +261,7 @@ class SqlResourceStatement
 
         return array_values(array_map(
             fn (array $source): array => [
+                'cte' => null,
                 'table' => $source['table'],
                 'schema' => $source['schema'],
                 'database' => $source['database'],
@@ -261,6 +270,153 @@ class SqlResourceStatement
             ],
             $sources
         ));
+    }
+
+    /**
+     * The prefix with a WHERE condition placed in the CTE that source
+     * candidates with a `cte` name came from.
+     */
+    public function prefixWithSourceFilter(?string $whereCondition): string
+    {
+        if ($whereCondition === null) {
+            return $this->prefix;
+        }
+        $cte = $this->sourceFilterCte();
+        if ($cte === null || $cte['statement'] === null) {
+            throw new LogicException('This SQL resource has no CTE for source filters.');
+        }
+        return substr($this->prefix, 0, $cte['start'])
+            . $cte['statement']->injectMappedFilters($whereCondition, null)
+            . substr($this->prefix, $cte['end']);
+    }
+
+    /**
+     * Where catalog-resolved source filters go when the main SELECT reads
+     * exactly one source and it is a CTE: follow single-source CTE references
+     * to the CTE that reads only physical sources, so the filter limits rows
+     * before any CTE aggregates or ranks them. Null keeps them on the main
+     * SELECT; a null `statement` means the chain cannot hold a filter safely:
+     * a set operation in the main SELECT or a chain CTE (the filter would
+     * reach one branch only), a chain CTE that anything besides the next link
+     * reads (its other readers would be filtered too), or a CTE joined with
+     * other sources.
+     *
+     * @return array{name: string, start: int, end: int, statement: ?self}|null
+     */
+    private function sourceFilterCte(): ?array
+    {
+        // Placeholders render to other lengths, so CTE offsets would not hold.
+        if ($this->databaseIds !== []) return null;
+        $expressions = $this->commonTableExpressions();
+        $refused = ['name' => '', 'start' => 0, 'end' => 0, 'statement' => null];
+        $statement = $this;
+        $target = null;
+        while (true) {
+            $sources = $statement->topLevelSources();
+            $names = array_map(fn (array $source): ?string => $source['schema'] === null
+                ? strtolower($source['table']) : null, $sources);
+            $referencesCte = array_filter($names, fn (?string $name): bool => $name !== null && isset($expressions[$name])) !== [];
+            if (!$referencesCte) break;
+            $name = $names[0];
+            if (count($sources) !== 1 || ($target !== null && isset($target['visited'][$name]))) {
+                return $target === null ? null : $refused;
+            }
+            if (self::hasTopLevelSetOperation($statement->body)
+                || $this->cteReaderCount($name, $expressions) !== 1) {
+                return $refused;
+            }
+            $range = $expressions[$name];
+            $body = substr($this->prefix, $range['start'], $range['end'] - $range['start']);
+            if ((self::topLevelTokens($body)[0]['value'] ?? null) !== 'SELECT' || self::hasTopLevelSetOperation($body)) {
+                return $refused;
+            }
+            $statement = new self('', $body, '', false);
+            $target = ['name' => $name, 'start' => $range['start'], 'end' => $range['end'],
+                'visited' => ($target['visited'] ?? []) + [$name => true]];
+        }
+        if ($target === null) return null;
+        unset($target['visited']);
+        return $target + ['statement' => $statement];
+    }
+
+    private static function hasTopLevelSetOperation(string $sql): bool
+    {
+        return array_filter(self::topLevelTokens($sql), fn (array $token): bool =>
+            in_array($token['value'], ['UNION', 'INTERSECT', 'EXCEPT'], true)) !== [];
+    }
+
+    /**
+     * References to CTE `$name` at any depth of the main SELECT and every CTE
+     * body: whole identifiers, bare or delimited. Text in strings and comments
+     * never counts, and an identifier with a dot beside it is a qualified name
+     * (`dbo.Name`, `Name.Column`), which a CTE never is, so it does not either.
+     * An alias that repeats the name counts, so the count errs towards refusal.
+     */
+    private function cteReaderCount(string $name, array $expressions): int
+    {
+        $segments = [$this->body];
+        foreach ($expressions as $range) {
+            $segments[] = substr($this->prefix, $range['start'], $range['end'] - $range['start']);
+        }
+        $count = 0;
+        foreach ($segments as $sql) {
+            self::scan($sql, function (string $type, int $start, string $value) use ($sql, $name, &$count): void {
+                if (!in_array($type, ['word', 'quoted'], true)) return;
+                $identifier = $type === 'quoted' ? str_replace([']]', '""'], [']', '"'], substr($value, 1, -1)) : $value;
+                if (strtolower($identifier) !== $name) return;
+                $before = $start - 1;
+                while ($before >= 0 && str_contains(" \t\n\r\f\v", $sql[$before])) $before--;
+                $after = $start + strlen($value);
+                while ($after < strlen($sql) && str_contains(" \t\n\r\f\v", $sql[$after])) $after++;
+                if (($before >= 0 && $sql[$before] === '.') || ($after < strlen($sql) && $sql[$after] === '.')) return;
+                $count++;
+            }, true);
+        }
+        return $count;
+    }
+
+    /**
+     * Body offsets, within the prefix, of each CTE it defines, by lowercase
+     * name. Empty unless the prefix is exactly
+     * `WITH name [(columns)] AS (body) [, name AS (body) ...]`.
+     *
+     * @return array<string, array{start: int, end: int}>
+     */
+    private function commonTableExpressions(): array
+    {
+        $events = [];
+        self::scan($this->prefix, function (string $type, int $start, string $value) use (&$events): void {
+            $events[] = [$type, $start, $value];
+        });
+        if (($events[0][0] ?? null) !== 'word' || strtoupper($events[0][2]) !== 'WITH') return [];
+        $expressions = [];
+        $expected = 'name';
+        $name = null;
+        $bodyStart = null;
+        foreach (array_slice($events, 1) as [$type, $start, $value]) {
+            if ($expected === 'name' && in_array($type, ['word', 'quoted'], true)) {
+                $name = strtolower(trim($value, '[]"'));
+                if (isset($expressions[$name])) return [];
+                $expected = 'columns-or-as';
+            } elseif ($expected === 'columns-or-as' && $type === 'open') {
+                $expected = 'columns-end';
+            } elseif ($expected === 'columns-end' && $type === 'close') {
+                $expected = 'as';
+            } elseif (in_array($expected, ['columns-or-as', 'as'], true) && $type === 'word' && strtoupper($value) === 'AS') {
+                $expected = 'body';
+            } elseif ($expected === 'body' && $type === 'open') {
+                $bodyStart = $start + 1;
+                $expected = 'body-end';
+            } elseif ($expected === 'body-end' && $type === 'close') {
+                $expressions[$name] = ['start' => $bodyStart, 'end' => $start];
+                $expected = 'comma';
+            } elseif ($expected === 'comma' && $type === 'comma') {
+                $expected = 'name';
+            } else {
+                return [];
+            }
+        }
+        return $expected === 'comma' ? $expressions : [];
     }
 
     /**
@@ -376,26 +532,16 @@ class SqlResourceStatement
         if ($whereCondition !== null) {
             $boundary = $this->firstTokenPosition($tokens, ['GROUP', 'HAVING', 'ORDER', 'OFFSET', 'FETCH', 'FOR']);
             $where = $this->firstTokenPosition($tokens, ['WHERE']);
-            $position = $boundary ?? strlen($this->body);
-            $insertions[] = [
-                'position' => $position,
-                'priority' => 0,
-                'sql' => $where !== null && $where < $position
-                    ? " AND ({$whereCondition}) "
-                    : " WHERE {$whereCondition} ",
-            ];
+            array_push($insertions, ...$this->clauseInsertions(
+                'WHERE', $where, $boundary ?? strlen($this->body), $whereCondition, 0
+            ));
         }
         if ($havingCondition !== null) {
             $boundary = $this->firstTokenPosition($tokens, ['ORDER', 'OFFSET', 'FETCH', 'FOR']);
             $having = $this->firstTokenPosition($tokens, ['HAVING']);
-            $position = $boundary ?? strlen($this->body);
-            $insertions[] = [
-                'position' => $position,
-                'priority' => 1,
-                'sql' => $having !== null && $having < $position
-                    ? " AND ({$havingCondition}) "
-                    : " HAVING {$havingCondition} ",
-            ];
+            array_push($insertions, ...$this->clauseInsertions(
+                'HAVING', $having, $boundary ?? strlen($this->body), $havingCondition, 1
+            ));
         }
 
         usort($insertions, function (array $left, array $right): int {
@@ -411,6 +557,25 @@ class SqlResourceStatement
                 . substr($body, $insertion['position']);
         }
         return $body;
+    }
+
+    /**
+     * Text that adds `$condition` to the clause `$keyword` (at `$existing`,
+     * when the statement has one before `$position`) or appends the clause at
+     * `$position`. An authored condition is parenthesized, so its own OR
+     * cannot capture the runtime condition: `a OR b` becomes
+     * `(a OR b) AND (condition)`. Text inserted at `$position` starts on a new
+     * line, so an authored trailing `--` comment cannot swallow it.
+     */
+    private function clauseInsertions(string $keyword, ?int $existing, int $position, string $condition, int $priority): array
+    {
+        if ($existing === null || $existing >= $position) {
+            return [['position' => $position, 'priority' => $priority, 'sql' => "\n{$keyword} {$condition} "]];
+        }
+        return [
+            ['position' => $existing + strlen($keyword), 'priority' => $priority, 'sql' => ' ('],
+            ['position' => $position, 'priority' => $priority, 'sql' => "\n) AND ({$condition}) "],
+        ];
     }
 
     private function firstTokenPosition(array $tokens, array $values): ?int
@@ -551,11 +716,13 @@ class SqlResourceStatement
                 continue;
             }
             if ($character === '(') {
+                if ($depth === 0) $visitor('open', $index, '(');
                 $depth++;
                 $index++;
                 continue;
             }
             if ($character === ')') {
+                if ($depth === 1) $visitor('close', $index, ')');
                 $depth = max(0, $depth - 1);
                 $index++;
                 continue;

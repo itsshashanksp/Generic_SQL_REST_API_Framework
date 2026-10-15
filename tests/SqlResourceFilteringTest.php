@@ -481,9 +481,83 @@ SQL;
         'filters' => [['field' => 'MinimumSales', 'operator' => '>=', 'value' => 100]],
     ]);
     filteringAssert(
-        str_contains(end($havingEngine->executions)['sql'], 'HAVING COUNT(*) > 1  AND ((SUM(Amount)) >= ?)'),
+        str_contains(end($havingEngine->executions)['sql'], "HAVING ( COUNT(*) > 1 \n) AND ((SUM(Amount)) >= ?)"),
         'Mapped HAVING filter was not appended to an existing HAVING clause.'
     );
+
+    // A runtime filter added to an authored WHERE or HAVING must constrain the
+    // whole authored condition: `a OR b` becomes `(a OR b) AND (filter)`, in
+    // the main SELECT, a CTE, and every count and data query.
+    $groupingCases = [
+        'or-where' => [
+            "SELECT Description AS Category, 0 AS Sales FROM NumericEvents WHERE Description = 'a' OR Description = 'b' ORDER BY Category",
+            "/WHERE \\( Description = 'a' OR Description = 'b' \\n\\) AND \\(\\(NumericEvents\\.StoredDate\\) >= \\?\\)/",
+        ],
+        'or-where-nested' => [
+            "SELECT Description AS Category, 0 AS Sales FROM NumericEvents WHERE (Description = 'a' OR Description = 'b') AND Description <> 'c' OR StoredDate IS NULL GROUP BY Description",
+            "/WHERE \\( \\(Description = 'a' OR Description = 'b'\\) AND Description <> 'c' OR StoredDate IS NULL \\n\\) AND \\(\\(NumericEvents\\.StoredDate\\) >= \\?\\) GROUP BY/",
+        ],
+        'or-where-cte' => [
+            "WITH Recent AS (SELECT Description, StoredDate FROM NumericEvents WHERE Description = 'a' OR Description = 'b') SELECT Description AS Category, 0 AS Sales FROM Recent",
+            "/^WITH Recent AS \\(SELECT Description, StoredDate FROM NumericEvents WHERE \\( Description = 'a' OR Description = 'b'\\n\\) AND \\(\\(NumericEvents\\.StoredDate\\) >= \\?\\) \\) SELECT/",
+        ],
+    ];
+    foreach ($groupingCases as $resource => [$sql, $expected]) {
+        file_put_contents($testDirectory . DIRECTORY_SEPARATOR . $resource . '.sql', $sql);
+        $files[] = $testDirectory . DIRECTORY_SEPARATOR . $resource . '.sql';
+        $groupingEngine = new SqlResourceFilteringEngine();
+        (new SqlRepository($groupingEngine, new SqlResourceRegistry([], $testDirectory), null, $dateMetadata))->execute([
+            'resource' => $resource,
+            ...filteringExecution(['StoredDate' => ['placement' => 'source']]),
+            'filters' => [['field' => 'StoredDate', 'type' => 'date', 'operator' => '>=', 'value' => '2026-04-01']],
+            'pagination' => ['page' => 1, 'pageSize' => 10],
+        ]);
+        $queries = array_values(array_filter($groupingEngine->executions, fn (array $execution): bool => !str_contains($execution['sql'], 'compatibility_level')));
+        filteringAssert(count($queries) === 2, "The count and data queries did not both run: {$resource}.");
+        foreach ($queries as $query) {
+            filteringAssert(
+                preg_match($expected, $query['sql']) === 1 && $query['params'] === [20260401],
+                "An authored OR was not grouped before the runtime filter: {$resource}."
+            );
+        }
+    }
+    $orHavingFile = $testDirectory . DIRECTORY_SEPARATOR . 'or-having.sql';
+    file_put_contents($orHavingFile, 'SELECT Category AS Category, SUM(Amount) AS Sales FROM Sales GROUP BY Category HAVING COUNT(*) > 1 OR SUM(Amount) < 0 ORDER BY Sales DESC');
+    $files[] = $orHavingFile;
+    $orHavingEngine = new SqlResourceFilteringEngine();
+    (new SqlRepository($orHavingEngine, new SqlResourceRegistry([], $testDirectory)))->execute([
+        'resource' => 'or-having',
+        ...filteringExecution(['MinimumSales' => ['expression' => 'SUM(Amount)', 'placement' => 'having']]),
+        'filters' => [['field' => 'MinimumSales', 'operator' => '>=', 'value' => 100]],
+    ]);
+    filteringAssert(
+        str_contains(end($orHavingEngine->executions)['sql'], "HAVING ( COUNT(*) > 1 OR SUM(Amount) < 0 \n) AND ((SUM(Amount)) >= ?)")
+            && end($orHavingEngine->executions)['params'] === [100],
+        'An authored HAVING OR was not grouped before the runtime filter.'
+    );
+
+    // A filter placed after an authored trailing line comment starts on a new
+    // line, so the comment cannot swallow it.
+    foreach ([
+        'comment-where' => "SELECT Description AS Category, 0 AS Sales FROM NumericEvents WHERE Description = 'a' OR Description = 'b' -- trailing note",
+        'comment-no-where' => 'SELECT Description AS Category, 0 AS Sales FROM NumericEvents -- trailing note',
+    ] as $resource => $sql) {
+        file_put_contents($testDirectory . DIRECTORY_SEPARATOR . $resource . '.sql', $sql);
+        $files[] = $testDirectory . DIRECTORY_SEPARATOR . $resource . '.sql';
+        $commentEngine = new SqlResourceFilteringEngine();
+        (new SqlRepository($commentEngine, new SqlResourceRegistry([], $testDirectory), null, $dateMetadata))->execute([
+            'resource' => $resource,
+            ...filteringExecution(['StoredDate' => ['placement' => 'source']]),
+            'filters' => [['field' => 'StoredDate', 'type' => 'date', 'operator' => '>=', 'value' => '2026-04-01']],
+        ]);
+        $commentLines = preg_split('/\n/', end($commentEngine->executions)['sql']);
+        $filterLine = array_values(array_filter($commentLines, fn (string $line): bool => str_contains($line, '(NumericEvents.StoredDate) >= ?')));
+        filteringAssert(
+            count($filterLine) === 1 && !str_contains($filterLine[0], '--')
+                && ($resource !== 'comment-where' || str_contains(end($commentEngine->executions)['sql'], "WHERE ( Description = 'a' OR Description = 'b' -- trailing note\n) AND (")),
+            "A trailing line comment swallowed the runtime filter: {$resource}."
+        );
+    }
 
     $cteFile = $testDirectory . DIRECTORY_SEPARATOR . 'cte.sql';
     file_put_contents($cteFile, 'WITH Recent AS (SELECT Id, CreatedAt FROM Events) SELECT Id AS Category, 0 AS Sales FROM Recent ORDER BY Category');
@@ -503,6 +577,121 @@ SQL;
         str_starts_with($cteData['sql'], 'WITH Recent AS')
             && str_contains($cteData['sql'], 'WHERE (Recent.CreatedAt) > ?'),
         'Mapped CTE filtering did not target the main SELECT.'
+    );
+
+    // A catalog-resolved source filter on a resource whose main SELECT reads
+    // one CTE follows the CTE chain to the physical source, so it limits the
+    // rows before aggregation and ranking (the Sales dashboard TOP-10 shape).
+    $rankedCteFile = $testDirectory . DIRECTORY_SEPARATOR . 'ranked-cte.sql';
+    file_put_contents($rankedCteFile, "WITH Totals AS\n(\n    SELECT Description AS Category, COUNT(*) AS Sales\n    FROM NumericEvents\n    WHERE Description IS NOT NULL\n    GROUP BY Description\n),\nRanked AS\n(\n    SELECT Category, Sales, DENSE_RANK() OVER (ORDER BY Sales DESC) AS RowNo\n    FROM Totals\n)\nSELECT Category, Sales\nFROM Ranked\nWHERE RowNo <= 10\nORDER BY Sales DESC;");
+    $files[] = $rankedCteFile;
+    $rankedCteRegistry = new SqlResourceRegistry([], $testDirectory);
+    $rankedCteEngine = new SqlResourceFilteringEngine();
+    (new SqlRepository($rankedCteEngine, $rankedCteRegistry, null, $dateMetadata))->execute([
+        'resource' => 'ranked-cte',
+        ...filteringExecution(['StoredDate' => ['placement' => 'source']]),
+        'filters' => [['field' => 'StoredDate', 'type' => 'daterange', 'operator' => 'BETWEEN', 'value' => ['2026-04-01', '2027-03-31']]],
+        'pagination' => ['page' => 1, 'pageSize' => 10],
+    ]);
+    $rankedCteData = end($rankedCteEngine->executions);
+    filteringAssert(
+        preg_match('/^WITH Totals AS.*WHERE \( Description IS NOT NULL\s+\) AND \(\(NumericEvents\.StoredDate\) BETWEEN \? AND \?\) GROUP BY Description\s*\),\s*Ranked AS/s', $rankedCteData['sql']) === 1
+            && str_contains($rankedCteData['sql'], 'WHERE RowNo <= 10')
+            && substr_count($rankedCteData['sql'], 'StoredDate') === 1
+            && $rankedCteData['params'] === [20260401, 20270331],
+        'A resolved source filter did not reach the physical source of the CTE chain.'
+    );
+    foreach ($rankedCteEngine->executions as $execution) {
+        if (str_contains($execution['sql'], 'compatibility_level')) continue;
+        filteringAssert(
+            str_starts_with($execution['sql'], 'WITH Totals AS') && $execution['params'] === [20260401, 20270331],
+            'A CTE source filter was missing from a count or data query.'
+        );
+    }
+
+    // Placement stays unambiguous: a CTE with a set operation is refused, and
+    // OR cannot combine a CTE-placed filter with a main-SELECT mapping.
+    $unionCteFile = $testDirectory . DIRECTORY_SEPARATOR . 'union-cte.sql';
+    file_put_contents($unionCteFile, 'WITH Events AS (SELECT Description, StoredDate FROM NumericEvents UNION ALL SELECT Description, 0 FROM NativeEvents) SELECT Description AS Category, 0 AS Sales FROM Events');
+    $files[] = $unionCteFile;
+    $unionCteFailure = filteringFailure(
+        fn () => (new SqlRepository(new SqlResourceFilteringEngine(), new SqlResourceRegistry([], $testDirectory), null, $dateMetadata))->execute([
+            'resource' => 'union-cte',
+            ...filteringExecution(['StoredDate' => ['placement' => 'source']]),
+            'filters' => [['field' => 'StoredDate', 'type' => 'date', 'operator' => '>=', 'value' => '2026-04-01']],
+        ]),
+        'A source filter was placed into a set-operation CTE.'
+    );
+    filteringAssert(
+        $unionCteFailure instanceof ApiRequestException
+            && in_array($unionCteFailure->getErrorCode(), ['INVALID_SQL_RUNTIME_FILTER', 'INVALID_SQL_RUNTIME_FIELD'], true),
+        'A set-operation CTE source filter returned the wrong error.'
+    );
+    $mixedCteFailure = filteringFailure(
+        fn () => (new SqlRepository(new SqlResourceFilteringEngine(), $rankedCteRegistry, null, $dateMetadata))->execute([
+            'resource' => 'ranked-cte',
+            ...filteringExecution([
+                'StoredDate' => ['placement' => 'source'],
+                'TopRank' => ['expression' => 'Ranked.RowNo', 'placement' => 'source'],
+            ]),
+            'filterLogic' => 'OR',
+            'filters' => [
+                ['field' => 'StoredDate', 'type' => 'date', 'operator' => '>=', 'value' => '2026-04-01'],
+                ['field' => 'TopRank', 'operator' => '<=', 'value' => 3],
+            ],
+        ]),
+        'OR filters spanning a CTE and the main SELECT were accepted.'
+    );
+    filteringAssert(
+        $mixedCteFailure instanceof ApiRequestException
+            && $mixedCteFailure->getErrorCode() === 'INVALID_SQL_RUNTIME_FILTER',
+        'Mixed CTE and main-SELECT OR filters returned the wrong error.'
+    );
+
+    // A CTE source filter is refused, before any query runs, when placing it
+    // in the CTE would filter only part of the result: a set operation in the
+    // final SELECT, or a chain CTE that something else also reads.
+    $refusedCteCases = [
+        'union-main-cte' => 'WITH A AS (SELECT Description, StoredDate FROM NumericEvents) SELECT Description AS Category, 0 AS Sales FROM A UNION ALL SELECT Description, 0 FROM NativeEvents',
+        'shared-cte-subquery' => 'WITH Base AS (SELECT Description, StoredDate FROM NumericEvents), Totals AS (SELECT Description AS Category, COUNT(*) AS Sales FROM Base GROUP BY Description) SELECT Category, Sales FROM Totals WHERE Sales > (SELECT COUNT(*) FROM Base) / 10',
+        'shared-cte-quoted-alias' => 'WITH Base AS (SELECT Description, StoredDate FROM NumericEvents), Totals AS (SELECT Description AS Category, COUNT(*) AS Sales FROM Base GROUP BY Description) SELECT Category, Sales FROM Totals WHERE EXISTS (SELECT 1 FROM [Base] AS Other WHERE Other.Description = Totals.Category)',
+        'shared-cte-definition' => 'WITH Base AS (SELECT Description, StoredDate FROM NumericEvents), Totals AS (SELECT Description AS Category, COUNT(*) AS Sales FROM Base GROUP BY Description), Named AS (SELECT Description FROM Base) SELECT Category, Sales FROM Totals WHERE Category IN (SELECT Description FROM Named)',
+    ];
+    foreach ($refusedCteCases as $resource => $sql) {
+        file_put_contents($testDirectory . DIRECTORY_SEPARATOR . $resource . '.sql', $sql);
+        $files[] = $testDirectory . DIRECTORY_SEPARATOR . $resource . '.sql';
+        $refusedCteEngine = new SqlResourceFilteringEngine();
+        $refusedCteFailure = filteringFailure(
+            fn () => (new SqlRepository($refusedCteEngine, new SqlResourceRegistry([], $testDirectory), null, $dateMetadata))->execute([
+                'resource' => $resource,
+                ...filteringExecution(['StoredDate' => ['placement' => 'source']]),
+                'filters' => [['field' => 'StoredDate', 'type' => 'date', 'operator' => '>=', 'value' => '2026-04-01']],
+            ]),
+            "A partially applied CTE source filter was accepted: {$resource}."
+        );
+        filteringAssert(
+            $refusedCteFailure instanceof ApiRequestException
+                && $refusedCteFailure->getErrorCode() === 'INVALID_SQL_RUNTIME_FIELD'
+                && $refusedCteEngine->executions === [],
+            "An ambiguous CTE source filter was not refused before execution: {$resource}."
+        );
+    }
+
+    // Names inside strings, comments and qualified column references are not
+    // readers, so they do not prevent placement.
+    $mentionedCteFile = $testDirectory . DIRECTORY_SEPARATOR . 'mentioned-cte.sql';
+    file_put_contents($mentionedCteFile, "WITH Totals AS (SELECT Description AS Category, COUNT(*) AS Sales FROM NumericEvents GROUP BY Description),\nRanked AS (SELECT Totals.Category, Totals . Sales, DENSE_RANK() OVER (ORDER BY Totals.Sales DESC) AS RowNo FROM Totals)\n-- Ranked reads Totals\nSELECT Category, Sales FROM Ranked WHERE RowNo <= 10 AND Category <> 'Totals' /* not Ranked */");
+    $files[] = $mentionedCteFile;
+    $mentionedCteEngine = new SqlResourceFilteringEngine();
+    (new SqlRepository($mentionedCteEngine, new SqlResourceRegistry([], $testDirectory), null, $dateMetadata))->execute([
+        'resource' => 'mentioned-cte',
+        ...filteringExecution(['StoredDate' => ['placement' => 'source']]),
+        'filters' => [['field' => 'StoredDate', 'type' => 'date', 'operator' => '>=', 'value' => '2026-04-01']],
+    ]);
+    filteringAssert(
+        str_contains(end($mentionedCteEngine->executions)['sql'], "FROM NumericEvents \nWHERE (NumericEvents.StoredDate) >= ? GROUP BY Description")
+            && end($mentionedCteEngine->executions)['params'] === [20260401],
+        'A CTE named only in strings, comments or qualified columns blocked filter placement.'
     );
 
     $unionFile = $testDirectory . DIRECTORY_SEPARATOR . 'union.sql';
