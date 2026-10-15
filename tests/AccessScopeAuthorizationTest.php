@@ -551,6 +551,50 @@ try {
     $denied(['action' => 'select', 'source' => ['table' => 'Customers'], 'fields' => ['Id']], 'frontend reader', 'The generated draft granted an unused column.', $generated);
     $denied(['action' => 'select', 'source' => ['table' => 'Customers'], 'fields' => ['*']], 'frontend reader', 'The generated draft granted every column.', $generated);
 
+    // A widget's filterFields renames the shared dashboard filters it sends
+    // (Bill dashboard purchases widgets: Bill_Date → GIN_Date), so the draft
+    // grants the renamed field; an invalid target is left for review.
+    file_put_contents($frontendConfig . '/dashboards/bill.json', json_encode([
+        'filters' => [['field' => 'Bill_Date', 'type' => 'daterange']],
+        'widgets' => [
+            ['id' => 'purchases', 'queryDefinition' => ['resource' => 'widgets/bill-purchases-month-wise'],
+                'columns' => [['field' => 'Month'], ['field' => 'Purchases']], 'filterFields' => ['Bill_Date' => 'GIN_Date']],
+            ['id' => 'sales', 'queryDefinition' => ['resource' => 'widgets/bill-sales-month-wise'],
+                'columns' => [['field' => 'Month'], ['field' => 'Sales']]],
+            ['id' => 'invalid', 'queryDefinition' => ['resource' => 'widgets/bill-total-purchases'],
+                'filterFields' => ['Bill_Date' => 'PurMastTable.GIN_Date']],
+        ],
+    ]));
+    $process = proc_open([PHP_BINARY, dirname(__DIR__) . '/scripts/generate-access-scope-draft.php', $frontendConfig, 'company'],
+        [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+    $mappedDraft = json_decode(stream_get_contents($pipes[1]), true);
+    $mappedReview = stream_get_contents($pipes[2]);
+    fclose($pipes[1]); fclose($pipes[2]);
+    scopeAssert(proc_close($process) === 0, 'The draft generator failed with filterFields: ' . $mappedReview);
+    unlink($frontendConfig . '/dashboards/bill.json');
+    $mappedResources = $mappedDraft['scopes']['frontend']['databases']['company']['resources'];
+    scopeAssert($mappedResources['widgets/bill-purchases-month-wise'] === ['filters' => ['GIN_Date']], 'A filterFields mapping was not applied: '
+        . json_encode($mappedResources['widgets/bill-purchases-month-wise']));
+    scopeAssert($mappedResources['widgets/bill-sales-month-wise'] === ['filters' => ['Bill_Date']], 'An unmapped widget lost its shared filter.');
+    scopeAssert($mappedResources['widgets/bill-total-purchases'] === ['filters' => ['Bill_Date']], 'An invalid filterFields target was applied.');
+    foreach ([
+        'dashboards/bill.json widget purchases: hidden filter column company:widgets/bill-purchases-month-wise → GIN_Date',
+        'dashboards/bill.json widget sales: hidden filter column company:widgets/bill-sales-month-wise → Bill_Date',
+        'dashboards/bill.json widget invalid: filterFields target "PurMastTable.GIN_Date" for Bill_Date is not a field name; Bill_Date was not renamed.',
+    ] as $expected) {
+        scopeAssert(str_contains($mappedReview, $expected), "The filterFields draft review lacks: {$expected}");
+    }
+    scopeAssert(!str_contains($mappedReview, 'company:widgets/bill-purchases-month-wise → Bill_Date'), 'The mapped widget still reported its shared field.');
+    $mappedDraft['mode'] = 'enforce';
+    $mappedGenerated = AccessScopeConfiguration::fromArray($mappedDraft);
+    $purchasesRequest = fn (string $field): array => [
+        'action' => 'sql', 'database' => 'company', 'resource' => 'widgets/bill-purchases-month-wise',
+        'execution' => ['columns' => ['Month', 'Purchases'], 'filters' => [$field => ['placement' => 'source']]],
+        'filters' => [['field' => $field, 'operator' => 'BETWEEN', 'value' => ['2021-04-01', '2022-03-31'], 'type' => 'daterange']],
+    ];
+    $allowed($purchasesRequest('GIN_Date'), 'frontend reader', 'The generated draft denied the mapped GIN_Date request.', $mappedGenerated);
+    $denied($purchasesRequest('Bill_Date'), 'frontend reader', 'The generated draft allowed the unmapped Bill_Date on a mapped resource.', $mappedGenerated);
+
     // Stage F: anonymous mode in production.
     $adminConfiguration = new AdminConfigurationRepository();
     $settings = $adminConfiguration->load();

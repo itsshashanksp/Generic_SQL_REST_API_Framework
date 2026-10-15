@@ -149,6 +149,28 @@ $addDefinition = function (array $definition, array $sharedFilters, string $orig
     }
 };
 
+/**
+ * The shared dashboard filters as one widget sends them: the frontend renames
+ * each shared field listed in the widget's `filterFields` to its target. A
+ * target is applied only when it is a plain field name; any other target is
+ * left unapplied and reported for review.
+ */
+$applyFilterFields = function (array $shared, mixed $filterFields, string $origin) use (&$review): array {
+    if (!is_array($filterFields) || $filterFields === []) return $shared;
+    foreach ($shared as $index => $filter) {
+        $field = is_array($filter) ? ($filter['field'] ?? null) : null;
+        if (!is_string($field) || !array_key_exists($field, $filterFields)) continue;
+        $target = $filterFields[$field];
+        if (is_string($target) && preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $target) === 1) {
+            $shared[$index]['field'] = $target;
+        } else {
+            $review[] = "{$origin}: filterFields target " . json_encode($target, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+                . " for {$field} is not a field name; {$field} was not renamed.";
+        }
+    }
+    return $shared;
+};
+
 $read = fn (string $file) => json_decode((string)file_get_contents($file), true);
 $base = rtrim($directory, '/\\');
 foreach (['reports', 'widgets'] as $kind) {
@@ -164,7 +186,9 @@ foreach (glob("{$base}/dashboards/*.json") ?: [] as $file) {
     $shared = $dashboard['filters'] ?? [];
     $addFilterOptions($shared, $origin);
     foreach ($dashboard['widgets'] ?? [] as $index => $widget) {
-        if (is_array($widget)) $addDefinition($widget, $shared, "{$origin} widget " . (is_string($widget['id'] ?? null) ? $widget['id'] : $index));
+        if (!is_array($widget)) continue;
+        $widgetOrigin = "{$origin} widget " . (is_string($widget['id'] ?? null) ? $widget['id'] : $index);
+        $addDefinition($widget, $applyFilterFields($shared, $widget['filterFields'] ?? null, $widgetOrigin), $widgetOrigin);
     }
 }
 
