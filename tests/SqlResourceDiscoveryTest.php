@@ -354,15 +354,18 @@ try {
         'Repository resource discovery or unique basename compatibility failed.'
     );
     // Resources referenced by the frontend Sales, Sales Receipts, Purchase,
-    // and Item dashboards must resolve to their exact files.
+    // Item, and Bill dashboards must resolve to their exact files.
     foreach ([
         'widgets/sales-month-wise', 'widgets/top-10-categories-sales', 'widgets/category-sales-month-wise',
+        'widgets/sales-top-10-month-wise-category-wise',
         'widgets/sales-day-wise', 'widgets/date-wise-gst-wise-sales', 'widgets/gst-wise-sales',
         'widgets/top-50-item-wise-sales', 'widgets/total-sales', 'widgets/daily-collection-summary',
         'widgets/payment-mode-wise-collection', 'widgets/monthly-collection-trend',
         'widgets/user-wise-day-wise-collection', 'widgets/top-10-largest-receipts',
         'widgets/purchases-month-wise', 'widgets/purchases-day-wise', 'widgets/total-purchases',
         'widgets/item-stock-value-by-category',
+        'widgets/bill-sales-month-wise', 'widgets/bill-purchases-month-wise', 'widgets/bill-top-10-categories',
+        'widgets/bill-category-sales-month-wise', 'widgets/bill-total-sales', 'widgets/bill-total-purchases',
     ] as $dashboardResource) {
         discoveryAssert(
             in_array($dashboardResource, $realIds, true)
@@ -374,6 +377,23 @@ try {
         discoveryAssert(
             !str_contains((string)file_get_contents($realRegistry->resolve($realId)['file']), '/*__RUNTIME_FILTERS__*/'),
             "Obsolete runtime-filter marker remains in {$realId}."
+        );
+    }
+    // Byte-identical copies drift apart when only one is fixed, so dashboards
+    // share one resource instead. A deliberate copy (for example a
+    // compatibility ID that must keep its own behaviour) is listed here, with
+    // the reason, as a sorted pair of resource IDs.
+    $allowedDuplicateResources = [];
+    $resourcesByContent = [];
+    foreach ($realIds as $realId) {
+        $resourcesByContent[hash_file('sha256', $realRegistry->resolve($realId)['file'])][] = $realId;
+    }
+    foreach ($resourcesByContent as $sameContent) {
+        if (count($sameContent) < 2) continue;
+        sort($sameContent, SORT_STRING);
+        discoveryAssert(
+            in_array($sameContent, $allowedDuplicateResources, true),
+            'SQL resources have byte-identical files: ' . implode(', ', $sameContent) . '. Share one resource or justify the copy.'
         );
     }
 

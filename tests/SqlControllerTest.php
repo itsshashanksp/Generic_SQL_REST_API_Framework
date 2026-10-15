@@ -568,7 +568,8 @@ sqlAssert($response['success'] === true, 'SQL response was not standardized.');
 sqlAssert($response['meta']['page'] === 2 && $response['meta']['pageSize'] === 25, 'SQL response pagination metadata changed.');
 
 // Bill dashboard resources: the selected date range is the only date limit,
-// months combine across years, and the Bill TOP-10 filters inside its CTE.
+// months combine across years, and the TOP-10 month-wise category report,
+// shared by the Bill and Sales dashboards, filters inside its CTE.
 $billCatalog = new class extends MetadataRepository {
     private array $types = [
         'billdettable' => ['bill_date' => 'int', 'cat_code' => 'int', 'status' => 'char', 'item_value' => 'decimal'],
@@ -588,7 +589,7 @@ foreach ($registry->discoverResourceIds() as $resourceId) {
 }
 $billCases = [
     'widgets/bill-purchases-month-wise' => [['Month', 'Purchases'], 'GIN_Date', 'PurMastTable.GIN_Date'],
-    'widgets/bill-top-10-month-wise-category-wise' => [['Month', 'Category', 'Sales'], 'Bill_Date', 'BIL.Bill_Date'],
+    'widgets/sales-top-10-month-wise-category-wise' => [['Month', 'Category', 'Sales'], 'Bill_Date', 'BIL.Bill_Date'],
 ];
 foreach ($billCases as $resource => [$columns, $field, $expression]) {
     $billEngine = new SqlTestEngine();
@@ -618,7 +619,49 @@ foreach ($billCases as $resource => [$columns, $field, $expression]) {
 }
 sqlAssert(
     strpos($billQueries[0]['sql'], '(BIL.Bill_Date) BETWEEN ? AND ?') < strpos($billQueries[0]['sql'], 'RankedData AS'),
-    'The Bill TOP-10 range was not placed in its SalesData CTE.'
+    'The TOP-10 range was not placed in its SalesData CTE.'
 );
+
+// The canonical TOP-10 resource: one calendar-month number per row, ranked
+// within that month, with no fixed date window of its own.
+$topTenId = 'widgets/sales-top-10-month-wise-category-wise';
+$topTenFile = $registry->resolve($topTenId)['file'];
+sqlAssert($topTenFile === realpath(QUERY_PATH . "/{$topTenId}.sql"), 'The canonical TOP-10 resource did not resolve to its file.');
+$topTenSql = (string)file_get_contents($topTenFile);
+sqlAssert(
+    preg_match('/\b(?:GETDATE|YEAR)\s*\(|\b20\d{6}\b/i', $topTenSql) === 0,
+    'The canonical TOP-10 resource has a fixed date window.'
+);
+sqlAssert(
+    str_contains($topTenSql, 'SUBSTRING(CONVERT(VARCHAR, BIL.Bill_Date), 5, 2) AS Month')
+        && preg_match('/GROUP BY\s+SUBSTRING\(CONVERT\(VARCHAR, BIL\.Bill_Date\), 5, 2\),\s+CAT\.Cat_Desc/', $topTenSql) === 1
+        && !str_contains($topTenSql, ', 1, 4)')
+        && preg_match('/PARTITION BY Month\s+ORDER BY Sales DESC/', $topTenSql) === 1,
+    'The canonical TOP-10 resource no longer groups and ranks by calendar month number.'
+);
+sqlAssert(
+    preg_match('/WHERE \(\s+BIL\.Cat_Code = CAT\.Cat_Code\s+\) AND \(\(BIL\.Bill_Date\) BETWEEN \? AND \?\)/', $billQueries[0]['sql']) === 1
+        && strpos($billQueries[0]['sql'], '(BIL.Bill_Date) BETWEEN ? AND ?') < strpos($billQueries[0]['sql'], 'DENSE_RANK()'),
+    'The TOP-10 range did not limit rows before ranking.'
+);
+
+// Removed IDs fail as unavailable resources. The released ID
+// widgets/TOP-10-month-Wise-Category-wise is absent pending the compatibility
+// decision recorded in CHANGELOG.md; restoring it must change this test.
+foreach ([
+    'widgets/bill-top-10-month-wise-category-wise', 'bill-top-10-month-wise-category-wise',
+    'widgets/TOP-10-month-Wise-Category-wise', 'TOP-10-month-Wise-Category-wise',
+] as $removedId) {
+    $removedFailure = null;
+    try {
+        $registry->resolve($removedId);
+    } catch (ApiRequestException $exception) {
+        $removedFailure = $exception;
+    }
+    sqlAssert(
+        $removedFailure !== null && $removedFailure->getErrorCode() === 'INVALID_SQL_RESOURCE',
+        "Removed SQL resource {$removedId} did not fail as INVALID_SQL_RESOURCE."
+    );
+}
 
 echo "SQL controller tests passed.\n";

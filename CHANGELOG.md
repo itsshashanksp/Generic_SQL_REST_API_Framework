@@ -31,6 +31,29 @@ Planned work is in [docs/Roadmap.md](docs/Roadmap.md).
 
 ### Changed
 
+- **SQL Resource IDs (breaking for direct API clients).** The TOP-10
+  month-wise category report released as `widgets/TOP-10-month-Wise-Category-wise`
+  (v2.0.0, v3.0.0) is now `widgets/sales-top-10-month-wise-category-wise`, one
+  resource shared by the Bill and Sales dashboards; the unreleased intermediate
+  copy `widgets/bill-top-10-month-wise-category-wise` was removed. Requests for
+  either removed ID return `400 INVALID_SQL_RESOURCE`. Its results changed
+  too: it has no five-years-ago window (a caller's date range limits the rows
+  inside the `SalesData` CTE, before ranking), and `Month` is the calendar
+  month number (`MM`, combining the same month across years) instead of
+  `MM/YYYY`.
+- **Bill dashboard SQL Resources** (`widgets/bill-*`) no longer limit
+  themselves to FY 2021-22: without a runtime date filter they read all dates,
+  and `widgets/bill-purchases-month-wise` groups by calendar month across
+  years.
+- **Open compatibility decision.** API-key integrations may call SQL
+  Resources directly, and whether any uses the released TOP-10 ID or relies on
+  the previous Bill results has not been confirmed by the API owner. Until it
+  is: deploy this backend together with the matching frontend; before
+  deploying, have each enabled API-key owner confirm the resources it calls;
+  if one needs the released ID, restore it for one release as its own file
+  with the v3.0.0 SQL (not an alias), list it in the duplicate allowance of
+  `SqlResourceDiscoveryTest.php` only if its content matches another resource,
+  and test it separately.
 - **Admin Console: Configuration → Database removed.** The **Databases** page
   (Databases and Servers tabs) is the only database UI. A V2 `database.json` is
   migrated by editing and saving the `default` server profile there. The
