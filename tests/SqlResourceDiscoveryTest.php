@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../app/Requests/QueryRequestValidator.php';
 require_once __DIR__ . '/../app/Requests/QueryRequestNormalizer.php';
 require_once __DIR__ . '/../app/Repositories/SqlRepository.php';
+require_once __DIR__ . '/support/SqlResourceFixtures.php';
 
 function discoveryAssert(bool $condition, string $message): void
 {
@@ -344,11 +345,11 @@ try {
         'Duplicate resource identities did not fail safely.'
     );
 
-    $realRegistry = new SqlResourceRegistry();
+    $realRegistry = sqlResourceFixtureRegistry();
     $realIds = $realRegistry->discoverResourceIds();
     discoveryAssert(
-        $realRegistry->resolve('reports/item')['file'] === realpath(QUERY_PATH . '/reports/item.sql')
-            && $realRegistry->resolve('item')['file'] === realpath(QUERY_PATH . '/reports/item.sql')
+        $realRegistry->resolve('reports/item')['file'] === realpath(sqlResourceFixtureRoot() . '/reports/item.sql')
+            && $realRegistry->resolve('item')['file'] === realpath(sqlResourceFixtureRoot() . '/reports/item.sql')
             && in_array('reports/customer', $realIds, true)
             && in_array('widgets/item-dashboard-stats', $realIds, true),
         'Repository resource discovery or unique basename compatibility failed.'
@@ -369,7 +370,7 @@ try {
     ] as $dashboardResource) {
         discoveryAssert(
             in_array($dashboardResource, $realIds, true)
-                && $realRegistry->resolve($dashboardResource)['file'] === realpath(QUERY_PATH . "/{$dashboardResource}.sql"),
+                && $realRegistry->resolve($dashboardResource)['file'] === realpath(sqlResourceFixtureRoot() . "/{$dashboardResource}.sql"),
             "Dashboard SQL resource {$dashboardResource} did not resolve to its file."
         );
     }

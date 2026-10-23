@@ -2,6 +2,7 @@
 
 
 require_once __DIR__ . '/../app/Repositories/SqlRepository.php';
+require_once __DIR__ . '/support/SqlResourceFixtures.php';
 
 function filteringAssert(bool $condition, string $message): void
 {
@@ -79,7 +80,7 @@ try {
 
     // Existing Item behavior: no marker, output alias allowlist, prepared value.
     $itemEngine = new SqlResourceFilteringEngine();
-    (new SqlRepository($itemEngine, new SqlResourceRegistry()))->execute([
+    (new SqlRepository($itemEngine, sqlResourceFixtureRegistry()))->execute([
         'resource' => 'item',
         'execution' => ['columns' => ['Item_Code', 'Item_Desc', 'Item_MRP']],
         'filters' => [['field' => 'Item_Desc', 'operator' => 'LIKE', 'value' => "%pen%' OR 1=1 --"]],
@@ -96,7 +97,7 @@ try {
     );
 
     $itemNoFilterEngine = new SqlResourceFilteringEngine();
-    (new SqlRepository($itemNoFilterEngine, new SqlResourceRegistry()))->execute(['resource' => 'item']);
+    (new SqlRepository($itemNoFilterEngine, sqlResourceFixtureRegistry()))->execute(['resource' => 'item']);
     $itemNoFilterData = end($itemNoFilterEngine->executions);
     filteringAssert(
         str_contains($itemNoFilterData['sql'], 'FROM ItemMasterTable')
@@ -107,7 +108,7 @@ try {
 
     // Existing Customer behavior: legacy source marker and integer-date conversion.
     $customerEngine = new SqlResourceFilteringEngine();
-    (new SqlRepository($customerEngine, new SqlResourceRegistry()))->execute([
+    (new SqlRepository($customerEngine, sqlResourceFixtureRegistry()))->execute([
         'resource' => 'customer',
         'execution' => [
             'columns' => ['Cust_Name', 'TotalCustomers'],

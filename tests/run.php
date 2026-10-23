@@ -80,7 +80,32 @@ foreach (['GENERIC_LOG_DIR' => 'logs', 'GENERIC_OPERATIONAL_LOG_DIR' => 'operati
     @mkdir($isolatedRoot . DIRECTORY_SEPARATOR . $path, 0700, true);
     putenv($name . '=' . $isolatedRoot . DIRECTORY_SEPARATOR . $path);
 }
-$removeIsolatedRoot = static function () use ($isolatedRoot): void {
+
+// Runtime SQL Resources are deployment-owned and intentionally absent from a
+// clean framework checkout. Install tracked examples only for this test run;
+// preserve any developer-owned files and remove only paths created here.
+$createdResourceFiles = [];
+$createdResourceDirectories = [];
+$fixtureRoot = dirname(__DIR__) . '/examples/sql-resources';
+$runtimeResourceRoot = dirname(__DIR__) . '/queries';
+$fixtureIterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($fixtureRoot, FilesystemIterator::SKIP_DOTS));
+foreach ($fixtureIterator as $fixture) {
+    if (!$fixture->isFile() || strtolower($fixture->getExtension()) !== 'sql') continue;
+    $relative = substr($fixture->getPathname(), strlen($fixtureRoot) + 1);
+    $target = $runtimeResourceRoot . DIRECTORY_SEPARATOR . $relative;
+    if (is_file($target)) continue;
+    $directory = dirname($target);
+    if (!is_dir($directory)) {
+        mkdir($directory, 0700, true);
+        $createdResourceDirectories[] = $directory;
+    }
+    if (!copy($fixture->getPathname(), $target)) throw new RuntimeException("Unable to install SQL Resource test fixture: {$relative}");
+    $createdResourceFiles[] = $target;
+}
+
+$removeIsolatedRoot = static function () use ($isolatedRoot, $createdResourceFiles, $createdResourceDirectories): void {
+    foreach ($createdResourceFiles as $path) @unlink($path);
+    foreach (array_reverse(array_unique($createdResourceDirectories)) as $path) @rmdir($path);
     if (!is_dir($isolatedRoot)) return;
     $items = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($isolatedRoot, FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::CHILD_FIRST);
     foreach ($items as $item) $item->isDir() ? @rmdir($item->getPathname()) : @unlink($item->getPathname());

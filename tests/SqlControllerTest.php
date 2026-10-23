@@ -5,6 +5,7 @@ require_once __DIR__ . '/../app/Requests/QueryRequestValidator.php';
 require_once __DIR__ . '/../app/Requests/QueryRequestNormalizer.php';
 require_once __DIR__ . '/../app/Repositories/SqlRepository.php';
 require_once __DIR__ . '/../app/Controllers/SQLController.php';
+require_once __DIR__ . '/support/SqlResourceFixtures.php';
 
 function sqlAssert(bool $condition, string $message): void
 {
@@ -132,9 +133,9 @@ expectSqlRequestInvalid($validator, ['action' => 'sql', 'resource' => 'item', 'f
     'field' => 'Item_Desc', 'operator' => '=', 'value' => 'x', 'type' => 'integer-date'
 ]]]);
 
-$registry = new SqlResourceRegistry();
+$registry = sqlResourceFixtureRegistry();
 sqlAssert(
-    $registry->resolve('reports/item')['file'] === realpath(QUERY_PATH . '/reports/item.sql'),
+    $registry->resolve('reports/item')['file'] === realpath(sqlResourceFixtureRoot() . '/reports/item.sql'),
     'Discovered Item resource was not resolved.'
 );
 try {
@@ -626,7 +627,7 @@ sqlAssert(
 // within that month, with no fixed date window of its own.
 $topTenId = 'widgets/sales-top-10-month-wise-category-wise';
 $topTenFile = $registry->resolve($topTenId)['file'];
-sqlAssert($topTenFile === realpath(QUERY_PATH . "/{$topTenId}.sql"), 'The canonical TOP-10 resource did not resolve to its file.');
+sqlAssert($topTenFile === realpath(sqlResourceFixtureRoot() . "/{$topTenId}.sql"), 'The canonical TOP-10 resource did not resolve to its file.');
 $topTenSql = (string)file_get_contents($topTenFile);
 sqlAssert(
     preg_match('/\b(?:GETDATE|YEAR)\s*\(|\b20\d{6}\b/i', $topTenSql) === 0,
