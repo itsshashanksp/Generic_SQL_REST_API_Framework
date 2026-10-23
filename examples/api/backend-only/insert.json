@@ -1,0 +1,6 @@
+{
+  "action": "insert",
+  "database": "sales",
+  "table": "DemoNotes",
+  "data": { "OrderId": 1001, "Note": "Reviewed" }
+}

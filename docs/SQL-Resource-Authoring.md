@@ -29,6 +29,10 @@ Hidden directories are never discoverable.
 
 ## Adding a resource
 
+Runtime report and widget resources are deployment-owned and ignored by Git.
+Tracked, opt-in samples live outside discovery under `examples/sql-resources/`;
+see the [example library](Example-Library.md) before copying one into `queries/`.
+
 Create a file under the root:
 
 ```sql

@@ -29,6 +29,7 @@ the [changelog](../CHANGELOG.md). Start with the repository
 | [Metadata and routines](Metadata-and-Routines.md) | Metadata actions and routine calls |
 | [SQL Resource Mode](SQL-Resource-Mode.md) | Executing server-owned SQL files by ID |
 | [SQL Resource authoring](SQL-Resource-Authoring.md) | Adding and reviewing SQL Resource files |
+| [Example library](Example-Library.md) | Tracked examples, local runtime SQL, activation, and validation |
 | [Write API](Write-API.md) | INSERT, UPDATE, DELETE, and UPSERT on any user table |
 | [SQL Parser](SQL-Parser-Generator.md) | Converting SQL into request JSON |
 

@@ -1,0 +1,6 @@
+{
+  "action": "procedure",
+  "database": "sales",
+  "source": { "procedure": "dbo.RebuildDemoSummary" },
+  "parameters": ["2026-01-31"]
+}

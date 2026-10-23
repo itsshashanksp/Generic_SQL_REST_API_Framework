@@ -5,6 +5,14 @@ Planned work is in [docs/Roadmap.md](docs/Roadmap.md).
 
 ## [Unreleased]
 
+### Added
+
+- A tracked, opt-in `examples/` library now preserves application SQL Resources,
+  provides generic read-only SQL and validated API request examples, and tests
+  that examples stay outside live discovery. Runtime `queries/reports/` and
+  `queries/widgets/` are deployment-owned and ignored; `queries/system/` remains
+  tracked internal framework code.
+
 ### Security
 
 - **Access scopes** (`config/access-scopes.json`) limit each role, and every

@@ -44,4 +44,4 @@ FROM RankedData
 WHERE RowNo <= 10
 ORDER BY
     Month,
-    Sales DESC;
+    Sales DESC

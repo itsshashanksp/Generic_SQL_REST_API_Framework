@@ -11,6 +11,7 @@ $tests = [
     __DIR__ . '/SqlResourceCapabilityTest.php',
     __DIR__ . '/SqlResourceFilteringTest.php',
     __DIR__ . '/SqlResourceDiscoveryTest.php',
+    __DIR__ . '/ExampleLibraryTest.php',
     __DIR__ . '/AccessScopeAuthorizationTest.php',
     __DIR__ . '/AccessScopeRegressionTest.php',
     __DIR__ . '/AccessScopeHttpEnforcementTest.php',

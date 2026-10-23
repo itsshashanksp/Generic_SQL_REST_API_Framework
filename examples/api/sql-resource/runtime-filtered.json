@@ -1,0 +1,19 @@
+{
+  "action": "sql",
+  "database": "sales",
+  "resource": "catalog/customer-summary",
+  "execution": {
+    "columns": ["CustomerId", "CustomerName", "OrderCount", "TotalAmount", "AverageAmount"],
+    "filters": {
+      "CustomerName": { "expression": "C.CustomerName", "placement": "source" },
+      "MinimumTotal": { "expression": "SUM(O.Amount)", "placement": "having" }
+    },
+    "defaultSort": [{ "field": "TotalAmount", "direction": "DESC" }]
+  },
+  "filters": [
+    { "field": "CustomerName", "operator": "LIKE", "value": "A%" },
+    { "field": "MinimumTotal", "operator": ">=", "value": 1000 }
+  ],
+  "sort": [{ "field": "CustomerName", "direction": "ASC" }],
+  "pagination": { "page": 1, "pageSize": 25 }
+}

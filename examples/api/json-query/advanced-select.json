@@ -1,0 +1,21 @@
+{
+  "action": "select",
+  "database": "sales",
+  "distinct": true,
+  "source": { "table": "DemoOrders", "alias": "o" },
+  "joins": [{ "type": "LEFT", "source": { "table": "DemoCustomers", "alias": "c" }, "on": { "left": "o.CustomerId", "operator": "=", "right": "c.CustomerId" } }],
+  "fields": [
+    "c.CustomerName",
+    { "function": "SUM", "field": "o.Amount", "alias": "TotalAmount" },
+    { "case": { "when": [{ "condition": { "field": "o.Status", "operator": "=", "value": "OPEN" }, "then": "Open" }], "else": "Closed" }, "alias": "StatusLabel" }
+  ],
+  "filters": [
+    { "field": "o.OrderDate", "operator": "BETWEEN", "value": ["2026-01-01", "2026-12-31"] },
+    { "field": "o.Status", "operator": "IN", "value": ["OPEN", "CLOSED"] }
+  ],
+  "filterLogic": "AND",
+  "groupBy": ["c.CustomerName", "o.Status"],
+  "having": [{ "function": "SUM", "field": "o.Amount", "operator": ">", "value": 0 }],
+  "sort": [{ "field": "TotalAmount", "direction": "DESC" }],
+  "pagination": { "page": 1, "pageSize": 50 }
+}

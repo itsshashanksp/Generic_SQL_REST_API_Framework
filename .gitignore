@@ -59,3 +59,9 @@ config/access-scopes.json
 !config/auth.example.json
 !config/installation.example.json
 !config/admin.example.json
+
+# Application-owned SQL Resources (versioned reference copies live in examples/)
+/queries/reports/*.sql
+/queries/reports/**/*.sql
+/queries/widgets/*.sql
+/queries/widgets/**/*.sql
