@@ -7,8 +7,6 @@ tracked, excluded from public discovery, and must not be copied or renamed.
 
 Version-controlled references live under `examples/`:
 
-- `examples/sql-resources/reports/` and `widgets/` preserve the original retail
-  application resources and their logical IDs.
 - `examples/sql-resources/catalog/` demonstrates generic read-only SQL features.
 - `examples/api/sql-resource/` and `json-query/` contain validated read requests.
 - `examples/api/metadata/` and `backend-only/` demonstrate privileged API shapes;
@@ -19,12 +17,12 @@ Version-controlled references live under `examples/`:
 From the backend repository root, copy only the resources the application needs:
 
 ```bash
-cp examples/sql-resources/reports/customer.sql queries/reports/customer.sql
-cp examples/sql-resources/widgets/total-sales.sql queries/widgets/total-sales.sql
+mkdir -p queries/catalog
+cp examples/sql-resources/catalog/customer-summary.sql queries/catalog/customer-summary.sql
 ```
 
-The relative path determines the ID: the files above become `reports/customer`
-and `widgets/total-sales`. No registry edit is needed. Do not copy the entire
+The relative path determines the ID: the file above becomes
+`catalog/customer-summary`. No registry edit is needed. Do not copy the entire
 library blindly: every discovered file is trusted backend code potentially
 available to callers with the relevant authorization. Review SQL, access scopes,
 application resource policy, physical schema, database permissions, and query
@@ -40,6 +38,7 @@ every SQL example, and prove examples remain outside live discovery. This is
 structural verification only; execute against a disposable matching SQL Server
 before claiming database compatibility.
 
-Frontend SQL Resource examples are related through the frontend's machine-readable
-`examples/sql-resource-contracts.json`. Its tests verify IDs, paths, declared
-aliases, filter fields, and frontend references.
+Historical application SQL needed by database-independent regression tests is
+isolated under `tests/fixtures/sql-resources/`. The test runner installs only
+missing fixtures for its lifetime and removes exactly what it created. These
+fixtures are not public examples and are never loaded by production startup.

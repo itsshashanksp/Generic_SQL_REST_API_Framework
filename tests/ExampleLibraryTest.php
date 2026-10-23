@@ -35,7 +35,7 @@ foreach ($iterator as $file) {
         $sqlFiles[] = $path;
     }
 }
-exampleLibraryAssert(count($sqlFiles) >= 30, 'Existing SQL Resource behavior was not comprehensively preserved.');
+exampleLibraryAssert(count($sqlFiles) >= 5, 'The generic SQL Resource catalog is incomplete.');
 
 // The examples tree is outside the configured discovery root and therefore
 // cannot become executable merely by being checked out.

@@ -86,7 +86,7 @@ foreach (['GENERIC_LOG_DIR' => 'logs', 'GENERIC_OPERATIONAL_LOG_DIR' => 'operati
 // preserve any developer-owned files and remove only paths created here.
 $createdResourceFiles = [];
 $createdResourceDirectories = [];
-$fixtureRoot = dirname(__DIR__) . '/examples/sql-resources';
+$fixtureRoot = __DIR__ . '/fixtures/sql-resources';
 $runtimeResourceRoot = dirname(__DIR__) . '/queries';
 $fixtureIterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($fixtureRoot, FilesystemIterator::SKIP_DOTS));
 foreach ($fixtureIterator as $fixture) {

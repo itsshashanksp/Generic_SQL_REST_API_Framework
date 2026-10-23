@@ -13,6 +13,10 @@ Planned work is in [docs/Roadmap.md](docs/Roadmap.md).
   `queries/widgets/` are deployment-owned and ignored; `queries/system/` remains
   tracked internal framework code.
 
+- Public SQL examples are limited to the generic catalog. Historical application
+  resources needed by regression tests are isolated under `tests/fixtures/` and
+  are never production discovery inputs.
+
 ### Security
 
 - **Access scopes** (`config/access-scopes.json`) limit each role, and every

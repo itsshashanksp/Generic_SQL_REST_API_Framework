@@ -392,7 +392,7 @@ try {
         $denied('G4 existing resource', ['action' => 'sql', 'resource' => 'widgets/sales-day-wise'], 'frontend reader')[0],
         $denied('G4 missing resource', ['action' => 'sql', 'resource' => 'widgets/no-such-resource'], 'frontend reader')[0],
     ]);
-    regressionAssert(is_file(__DIR__ . '/../examples/sql-resources/widgets/sales-day-wise.sql') && !is_file(__DIR__ . '/../examples/sql-resources/widgets/no-such-resource.sql'),
+    regressionAssert(is_file(__DIR__ . '/fixtures/sql-resources/widgets/sales-day-wise.sql') && !is_file(__DIR__ . '/fixtures/sql-resources/widgets/no-such-resource.sql'),
         'G4 resource fixtures changed.');
     $same('G4 database', array_map(fn (string $id): ?array => $denied("G4 database {$id}",
         ['action' => 'select', 'database' => $id, 'source' => ['table' => 'Orders'], 'fields' => ['Id']], 'frontend reader')[0],
