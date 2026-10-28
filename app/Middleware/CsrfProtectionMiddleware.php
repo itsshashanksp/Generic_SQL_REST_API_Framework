@@ -23,6 +23,7 @@ final class CsrfProtectionMiddleware extends Middleware
         'auth.frontendUsers.delete',
         'auth.frontendUsers.changePassword',
         'auth.frontendUsers.assignRole',
+        'configuration.chartColors.update',
         'auth.apiKeys.create',
         'auth.apiKeys.enable',
         'auth.apiKeys.disable',

@@ -79,6 +79,9 @@ require_once __DIR__ . '/../app/Requests/AuthRequestValidator.php';
 require_once __DIR__ . '/../app/Controllers/AuthController.php';
 require_once __DIR__ . '/../app/Requests/FrontendUserRequestValidator.php';
 require_once __DIR__ . '/../app/Controllers/FrontendUserController.php';
+require_once __DIR__ . '/../app/Requests/ChartConfigurationRequestValidator.php';
+require_once __DIR__ . '/../app/Middleware/ChartConfigurationAuthorizationMiddleware.php';
+require_once __DIR__ . '/../app/Controllers/ChartConfigurationController.php';
 
 // Read Request Body
 $publicRequest = json_decode(RequestBodyReader::read(), true);
@@ -110,6 +113,7 @@ $frontendUserActions = [
     'auth.frontendUsers.enable','auth.frontendUsers.disable','auth.frontendUsers.delete',
     'auth.frontendUsers.changePassword','auth.frontendUsers.assignRole',
 ];
+$chartConfigurationActions = ChartConfigurationRequestValidator::ACTIONS;
 $publicAuthenticationActions = array_merge($setupActions, $authActions);
 unset($_SERVER['GENERIC_AUTH_PROVIDER']);
 $requestedAction = (string)($publicRequest['action'] ?? '');
@@ -124,6 +128,7 @@ $authentication = new AuthenticationMiddleware(true, $publicAuthenticationAction
 $authentication->handle($publicRequest);
 (new ApiRateLimitMiddleware())->handle($publicRequest);
 (new FrontendUserAuthorizationMiddleware($frontendUserActions))->handle($publicRequest);
+(new ChartConfigurationAuthorizationMiddleware())->handle($publicRequest);
 (new CsrfProtectionMiddleware())->handle($publicRequest);
 
 if (in_array($publicRequest['action'] ?? null, $setupActions, true)) {
@@ -150,6 +155,11 @@ if (in_array($publicRequest['action'] ?? null, $authActions, true)) {
 }
 
 if (in_array($publicRequest['action'] ?? null,$frontendUserActions,true)){$request=(new FrontendUserRequestValidator())->validate($publicRequest);Response::setRequestContext(['action'=>$request['action']]);(new FrontendUserController())->dispatch($request);}
+if (in_array($publicRequest['action'] ?? null, $chartConfigurationActions, true)) {
+    $request = (new ChartConfigurationRequestValidator())->validate($publicRequest);
+    Response::setRequestContext(['action' => $request['action']]);
+    (new ChartConfigurationController())->dispatch($request);
+}
 
 (new AuthorizationMiddleware())->handle($publicRequest);
 // Access scopes, phase 0: before the availability gate can answer for a

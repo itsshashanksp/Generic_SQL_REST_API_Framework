@@ -48,6 +48,7 @@ $tests = [
     __DIR__ . '/AdminUserManagementTest.php',
     __DIR__ . '/AuthorizationAndApiKeyTest.php',
     __DIR__ . '/FrontendUserMutationAuthorizationTest.php',
+    __DIR__ . '/ChartConfigurationPersistenceTest.php',
     __DIR__ . '/AuthorizationBoundaryTest.php',
     __DIR__ . '/ApiSecurityHardeningTest.php',
     __DIR__ . '/AuthorizationApiCoverageTest.php',

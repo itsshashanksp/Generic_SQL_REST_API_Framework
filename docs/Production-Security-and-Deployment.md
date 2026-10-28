@@ -216,6 +216,7 @@ Set server-side values on the IIS FastCGI application/application-pool identity 
 ```text
 GENERIC_APP_ENV=production
 GENERIC_RUNTIME_CONFIG_DIR=<absolute path to a runtime state directory outside Backend, e.g. /srv/generic-reporting/state/config>
+GENERIC_FRONTEND_DASHBOARD_CONFIG_DIR=<absolute path to the deployed frontend dashboard JSON directory>
 GENERIC_SQL_API_ENCRYPTION_KEY=<secret supplied outside the repository>
 GENERIC_SQL_API_KEY=<legacy key only when that authentication path is used>
 ```
