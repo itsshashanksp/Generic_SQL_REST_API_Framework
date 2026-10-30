@@ -11,6 +11,22 @@ final class ChartConfigurationController extends BaseController
         if ($request['action'] === 'configuration.chartColors.get') {
             $this->success($this->service->colors($request['dashboardId']), 'Chart colors loaded.');
         }
-        $this->success([$this->service->update($request['dashboardId'], $request['widgetId'], $request['colors'], $request['expectedRevision'])], 'Chart colors saved.');
+        if (isset($request['colors'])) {
+            $record = $this->service->update($request['dashboardId'], $request['widgetId'], $request['colors'], $request['expectedRevision']);
+        } else {
+            $record = $this->service->updateConfiguration(
+                $request['dashboardId'],
+                $request['widgetId'],
+                $request['chartType'] ?? null,
+                $request['seriesColors'] ?? [],
+                $request['categoryColors'] ?? [],
+                $request['reset'],
+                $request['expectedRevision'],
+                $request['numberFormat'] ?? null,
+                $request['valueFormat'] ?? null,
+                $request['orientation'] ?? null
+            );
+        }
+        $this->success([$record], $request['reset'] ? 'Chart customization reset.' : 'Chart customization saved.');
     }
 }
