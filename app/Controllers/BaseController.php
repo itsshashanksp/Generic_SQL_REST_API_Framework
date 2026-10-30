@@ -8,9 +8,4 @@ class BaseController
     {
         Response::success($data, $message, $code);
     }
-
-    protected function error($message = "Something went wrong", $code = 500)
-    {
-        Response::error($message, $code);
-    }
 }
