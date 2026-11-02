@@ -21,7 +21,7 @@ $applicationRuntimeExample = json_decode((string)file_get_contents($root . '/con
 // must describe that version.
 $version = $application['version'] ?? null;
 repositoryDocumentationAssert(
-    ($application['app_name'] ?? null) === 'Generic SQL REST API Framework' && $version === '3.0.0',
+    ($application['app_name'] ?? null) === 'Framework' && $version === '3.0.0',
     'Application identity does not represent the v3.0.0 release.'
 );
 repositoryDocumentationAssert(
@@ -53,7 +53,7 @@ repositoryDocumentationAssert(
     'Changelog release status is inconsistent.'
 );
 repositoryDocumentationAssert(
-    str_starts_with($readme, "# Generic SQL REST API Framework\n")
+    str_starts_with($readme, "# Framework\n")
         && str_contains($readme, "| **v{$version}** | **Completed (2026-10-09) — current version** |")
         && str_contains($readme, '| v2.1.0 | Completed |')
         && !preg_match('/v[123]\.[01]\.0[^.\n]*unreleased/i', $readme)

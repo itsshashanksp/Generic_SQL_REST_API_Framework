@@ -12,6 +12,30 @@ Version-controlled references live under `examples/`:
 - `examples/api/metadata/` and `backend-only/` demonstrate privileged API shapes;
   write and routine examples are validation fixtures and are never auto-run.
 
+## Catalog
+
+| Path | Purpose and dependency | Authorization and validation |
+| --- | --- | --- |
+| `api/json-query/advanced-select.json` | Join, CASE, aggregation, HAVING, sorting, and paging over `DemoOrders` and `DemoCustomers` in logical database `sales` | Requires an authorized read principal and matching objects; request validator coverage only |
+| `api/sql-resource/runtime-filtered.json` | Runtime source/HAVING filters and paging for `catalog/customer-summary` | Requires the matching installed resource, read/resource scope, and compatible output fields |
+| `api/metadata/tables.json` | Table discovery for logical database `sales` | Requires `metadata.read` and an access scope that permits the database/list operation |
+| `api/backend-only/insert.json` | Single-row insert into illustrative `DemoNotes` | Requires `data.write`; never issued or auto-run by Dashboard |
+| `api/backend-only/procedure.json` | Illustrative `dbo.RebuildDemoSummary` call | Requires routine and write permissions; never auto-run |
+| `sql-resources/catalog/basic-orders.sql` | Bounded order list with CASE and deterministic order | Requires `DemoOrders`; review and install deliberately |
+| `sql-resources/catalog/customer-summary.sql` | Customer/order aggregation used by the SQL Resource request example | Requires `DemoCustomers` and `DemoOrders` |
+| `sql-resources/catalog/advanced-ranking.sql` | CTE and monthly window ranking | Requires `DemoOrders` and a compatible SQL Server version |
+| `sql-resources/catalog/set-and-subquery.sql` | `UNION ALL` and correlated `EXISTS` | Requires `DemoOrders`, `DemoCustomers`, and `DemoOrderArchive` |
+| `sql-resources/catalog/cross-database.sql` | Registered logical database placeholders | Replace `crm` and `sales`; both databases must use one server profile |
+
+All objects and logical database IDs are illustrative. Validate structure with:
+
+```bash
+php tests/ExampleLibraryTest.php
+```
+
+That command does not execute SQL. Live verification requires a disposable,
+authorized SQL Server environment with matching objects and access scopes.
+
 ## Activating examples
 
 From the backend repository root, copy only the resources the application needs:

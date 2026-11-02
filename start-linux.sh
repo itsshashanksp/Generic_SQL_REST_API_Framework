@@ -15,7 +15,7 @@ export GENERIC_RUNTIME_CONFIG_DIR="$BACKEND_ROOT/config"
 export GENERIC_APP_ENV=development
 
 echo "========================================"
-echo "       Generic SQL REST API Framework"
+echo "       Framework"
 echo "========================================"
 echo
 

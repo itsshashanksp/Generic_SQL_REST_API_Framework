@@ -1,6 +1,6 @@
 # Security verification
 
-This is the security verification record for the Generic SQL REST API Framework
+This is the security verification record for Framework
 backend: what was verified, how, every finding with its current status, and
 the security work that remains. Current controls are described in
 [Security model](Security-Model.md); the outstanding external test is scoped in

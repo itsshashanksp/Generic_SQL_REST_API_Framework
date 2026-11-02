@@ -1,4 +1,4 @@
-# Documentation map
+# Framework documentation
 
 Every document here describes the current release unless stated otherwise.
 Planned work appears only in the [Roadmap](Roadmap.md); release history is in
@@ -67,6 +67,7 @@ the [changelog](../CHANGELOG.md). Start with the repository
 | [Testing](Testing.md) | Running the suite, coverage, static checks, deployment validation |
 | [Contributing](../CONTRIBUTING.md) | Change expectations and pull requests |
 | [Roadmap](Roadmap.md) | Current, upcoming, and deferred work |
+| [Documentation audit inventory](DOCUMENTATION-AUDIT.md) | DOCS-0020 review scope, ownership, and consolidation decisions |
 
 ## Terminology
 

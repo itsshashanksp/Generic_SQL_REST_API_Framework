@@ -8,7 +8,7 @@ return [
     |--------------------------------------------------------------------------
     */
 
-    'app_name' => 'Generic SQL REST API Framework',
+    'app_name' => 'Framework',
 
     'version' => '3.0.0',
 

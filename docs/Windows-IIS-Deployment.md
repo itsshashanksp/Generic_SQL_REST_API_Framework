@@ -1,6 +1,6 @@
 # Windows Server IIS deployment
 
-This is the step-by-step procedure for installing the Generic SQL REST API Framework
+This is the step-by-step procedure for installing Framework
 on a fresh Windows Server with IIS, PHP FastCGI, the Microsoft ODBC Driver for
 SQL Server, and HTTPS. It is the authoritative **procedure**; the documents it
 links to remain authoritative for the underlying behavior:
@@ -144,12 +144,12 @@ Ports:
 
 ### 2.4 Build the frontend
 
-The site root serves the built reporting frontend from the separate
-Generic Reporting Framework repository. Build it on a workstation or build
+The site root serves the built frontend from the separate Dashboard repository.
+Build it on a workstation or build
 server with Node.js, pointing it at the same-origin API path:
 
 ```powershell
-cd <path-to>\Generic-Reporting-Framework
+cd <path-to>\Dashboard
 npm ci
 $env:VITE_API_URL = '/api'
 npm run build
@@ -334,12 +334,12 @@ values override earlier ones). If the project is not on the server yet, copy it
 first (section 8.2). Then add the host-specific paths below them:
 
 ```powershell
-Add-Content -Path C:\PHP\php.ini -Value "`r`n; --- Generic SQL REST API production settings ---"
+Add-Content -Path C:\PHP\php.ini -Value "`r`n; --- Framework production settings ---"
 Get-Content C:\GenericReporting\Backend\deployment\php-production-security.ini | Add-Content -Path C:\PHP\php.ini
 ```
 
 ```ini
-; --- Generic SQL REST API host-specific paths ---
+; --- Framework host-specific paths ---
 session.save_path = "C:\GenericReporting\sessions"
 error_log = "C:\GenericReporting\php-logs\php-errors.log"
 ```
@@ -792,9 +792,9 @@ and **(HTTP Traffic-In)** rules. Confirm them, or create explicit rules:
 
 ```powershell
 Get-NetFirewallRule -DisplayGroup 'World Wide Web Services (HTTP)' | Format-Table DisplayName, Enabled, Profile
-New-NetFirewallRule -DisplayName 'Generic Reporting HTTPS' -Direction Inbound -Protocol TCP -LocalPort 443 -Action Allow
+New-NetFirewallRule -DisplayName 'Framework HTTPS' -Direction Inbound -Protocol TCP -LocalPort 443 -Action Allow
 # Only if you deployed the redirect site:
-New-NetFirewallRule -DisplayName 'Generic Reporting HTTP redirect' -Direction Inbound -Protocol TCP -LocalPort 80 -Action Allow
+New-NetFirewallRule -DisplayName 'Framework HTTP redirect' -Direction Inbound -Protocol TCP -LocalPort 80 -Action Allow
 ```
 
 Outbound connections to SQL Server are allowed by default. Verify the path to

@@ -1,17 +1,16 @@
-# Generic SQL REST API Framework
+# Framework
 
-A generic PHP REST API framework for SQL databases, providing secure JSON-based
-database access through authentication, API permissions, dynamic queries, CRUD
-operations, filtering, sorting, pagination, and database-enforced access
-control.
+**SQL REST API Framework**
 
-This is **not an application-specific API**. It is a reusable backend layer that
-sits between client applications (reporting frontends, inventory, POS, ERP, or
-any other SQL application) and a SQL database. Clients describe what they need
-as JSON; the framework authenticates the caller, checks its API permissions,
-validates the request, builds parameterized SQL, and returns a standard JSON
-response. Client applications do not need backend code or backend registrations
-for their tables.
+Framework is a configurable REST API framework for SQL Server that provides
+authenticated database access, JSON queries, SQL Resources, data operations,
+and administrative capabilities.
+
+Framework is not application-specific. It sits between authorized clients and
+SQL Server. Clients submit documented JSON requests; Framework authenticates
+the caller, checks API permissions, validates the request, builds parameterized
+SQL where applicable, and returns a standard JSON response. Database object
+permissions remain a separate SQL Server boundary.
 
 **Database support:** Microsoft SQL Server through PHP ODBC is the only
 database engine. One installation can serve several SQL Server servers and
@@ -29,6 +28,28 @@ databases, which clients select by logical database id.
 Release history is in [CHANGELOG.md](CHANGELOG.md); planned work is in the
 [Roadmap](docs/Roadmap.md). Upgrading a v2.1 installation:
 [Upgrading to V3](docs/Upgrading-to-V3.md).
+
+Frontend and backend versions are independent. Framework's current released
+version is `3.0.0`; Dashboard currently uses its own `1.0.0-dev` display
+version.
+
+## Quick start
+
+Prerequisites are PHP 8.2 or newer, the PHP ODBC extension, Microsoft ODBC
+Driver for SQL Server, and access to a non-production SQL Server instance for
+live validation.
+
+```bash
+git clone https://github.com/sigmasoftwaresolutions/Framework.git
+cd Framework
+php tests/run.php
+./start-linux.sh
+```
+
+On Windows, use `start-windows.bat`. The built-in launchers are for local
+development only. Complete first-time setup through the loopback Admin Console
+before attempting authenticated data requests. See
+[Local development](docs/Local-Development.md).
 
 ## What it provides
 
@@ -69,7 +90,7 @@ Release history is in [CHANGELOG.md](CHANGELOG.md); planned work is in the
 Client application
         |
         v
-Generic SQL REST API
+Framework API
         |
         +-- Authentication       (who is calling?)
         +-- API permissions      (which operation may this principal perform?)
@@ -170,7 +191,7 @@ Each server profile's database login is the data access boundary. For example:
 API principal (data.read, data.write)
         |
         v
-Generic SQL REST API
+Framework API
         |
         v
 DB login: generic
@@ -223,7 +244,7 @@ It is not an authorization registry; which resources a caller may run, and
 with which filter columns, is set by [access scopes](docs/Access-Scopes.md). See
 [SQL Resource Mode](docs/SQL-Resource-Mode.md).
 
-## Generic CRUD
+## CRUD data operations
 
 Write requests name a database table instead of an application-specific
 resource:
@@ -275,6 +296,19 @@ because they may modify data, and session callers must send a CSRF token. See
 The security model and verification history are in
 [docs/security/](docs/security/Security-Model.md).
 
+## Configuration overview
+
+Runtime configuration is created from the tracked `config/*.example.json`
+templates and stored in ignored runtime files. Database credentials are
+encrypted in the registry and require `GENERIC_SQL_API_ENCRYPTION_KEY` from the
+worker environment. SQL Resources are discovered from the configured `queries/`
+root; installing a resource is a trusted backend deployment action.
+
+Do not publish runtime JSON, encryption keys, API keys, session data, logs, or
+database connection information. See
+[Database configuration](docs/Database-Configuration.md) and
+[Production security and deployment](docs/Production-Security-and-Deployment.md).
+
 ## Deployment
 
 | Model | Use | Guide |
@@ -302,10 +336,17 @@ the registry; see [Upgrading to V3](docs/Upgrading-to-V3.md).
   guide for your platform, and [Admin Console](docs/Admin-Console.md).
 - **Security reviewers:** [Security model](docs/security/Security-Model.md) and
   [Security verification](docs/security/Security-Verification.md).
-- **Maintainers and coding agents:** [AI development guide](docs/AI-Development-Guide.md),
+- **Maintainers:** [AI development guide](docs/AI-Development-Guide.md),
   [Testing](docs/Testing.md), and [CONTRIBUTING.md](CONTRIBUTING.md).
 
 The [documentation map](docs/README.md) lists every document.
+
+## Example library
+
+Tracked examples under `examples/` demonstrate JSON Query, SQL Resource,
+metadata, write, and routine request shapes plus generic SQL Server resource
+templates. They use illustrative `Demo*` objects and are never installed or
+executed automatically. See [Example library](docs/Example-Library.md).
 
 ## Tests
 
@@ -333,4 +374,27 @@ on a dedicated non-production server. See [Testing](docs/Testing.md).
 | `tests/` | Database-independent regression suites |
 | `docs/` | Reference, operations, and security documentation |
 
-Licensed under the terms in [LICENSE](LICENSE).
+## Limitations
+
+Framework supports Microsoft SQL Server through PHP ODBC. It does not provide
+MySQL, PostgreSQL, SQLite, distributed transactions, client-supplied SQL, bulk
+writes, or a public transaction API. Cross-database reads require registered
+databases on one server profile and are unavailable on Azure SQL Database.
+See [Current limitations](docs/Limitations.md).
+
+## Contributing
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting a change. API,
+authorization, SQL generation, deployment, and example changes require focused
+regression coverage and exact validation results.
+
+## License
+
+Framework is licensed under the terms in [LICENSE](LICENSE).
+
+## Related repository
+
+[Dashboard](https://github.com/sigmasoftwaresolutions/Dashboard) is the
+configuration-driven reporting and analytics frontend. Its validation and UI
+controls improve authoring and usability but never replace Framework
+authorization or SQL Server permissions.

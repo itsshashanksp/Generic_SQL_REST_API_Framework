@@ -44,23 +44,29 @@ Do not assume a non-2xx response has `meta`. On success, `data` is always an
 array. Use `meta.page`, `meta.pageSize`, and `meta.totalRows` for page controls;
 `rowsReturned` is only the size of this response.
 
-## JSON Query report
+## Dashboard JSON Query report
 
-A frontend-owned definition might be:
+A Dashboard definition keeps request structure at the top-level `request` key:
 
 ```json
 {
+  "id": "active-customers",
   "title": "Active customers",
-  "queryDefinition": {
-    "format": "json",
+  "request": {
+    "action": "select",
     "source": { "table": "Customers", "alias": "C" },
     "fields": ["C.CustomerCode", "C.Name", "C.Status"]
-  }
+  },
+  "columns": [
+    { "field": "CustomerCode", "header": "Customer" },
+    { "field": "Name", "header": "Name" },
+    { "field": "Status", "header": "Status" }
+  ]
 }
 ```
 
-`title`, `format`, labels, and presentation are not API properties. Translate the
-definition and UI state to:
+`id`, `title`, columns, labels, and presentation are not API properties.
+Dashboard merges applied UI state into `request` and sends:
 
 ```json
 {
@@ -81,29 +87,30 @@ The backend validates the structure and metadata, generates prepared SQL, and
 returns selected rows. Use this mode when frontend configuration legitimately
 selects from the public JSON function/join/filter vocabulary.
 
-## SQL Resource report
+## Dashboard SQL Resource report
 
-Frontend configuration can store the path-derived resource ID and reviewed
-execution metadata. This is application configuration, not arbitrary user input:
+Dashboard configuration stores a path-derived resource ID and top-level
+presentation fields. It does not author backend `execution` metadata directly:
 
 ```json
 {
-  "title": "Customer bill summary",
+  "id": "customer-summary",
+  "title": "Customer summary",
   "queryDefinition": {
     "format": "sql",
-    "resource": "reports/customer",
-    "execution": {
-      "columns": ["Cust_Name", "TotalCustomers", "MinimumBill", "MaximumBill"],
-      "filters": {
-        "StDate": {
-          "expression": "StDate",
-          "placement": "source",
-          "valueType": "integer-date"
-        }
-      },
-      "defaultSort": [{ "field": "Cust_Name", "direction": "ASC" }]
-    }
-  }
+    "resource": "catalog/customer-summary"
+  },
+  "columns": [
+    { "field": "CustomerId", "header": "Customer ID", "dataType": "number" },
+    { "field": "CustomerName", "header": "Customer" },
+    { "field": "OrderCount", "header": "Orders", "dataType": "number" },
+    { "field": "TotalAmount", "header": "Total", "dataType": "currency" },
+    { "field": "AverageAmount", "header": "Average", "dataType": "currency" }
+  ],
+  "filters": [
+    { "field": "CustomerName", "label": "Customer", "type": "text", "operator": "startsWith" }
+  ],
+  "sort": [{ "field": "TotalAmount", "direction": "DESC" }]
 }
 ```
 
@@ -112,37 +119,38 @@ Translate it and the UI date/name controls to:
 ```json
 {
   "action": "sql",
-  "resource": "reports/customer",
+  "resource": "catalog/customer-summary",
   "execution": {
-    "columns": ["Cust_Name", "TotalCustomers", "MinimumBill", "MaximumBill"],
-    "filters": {
-      "StDate": {
-        "expression": "StDate",
-        "placement": "source",
-        "valueType": "integer-date"
-      }
-    },
-    "defaultSort": [{ "field": "Cust_Name", "direction": "ASC" }]
+    "columns": ["CustomerId", "CustomerName", "OrderCount", "TotalAmount", "AverageAmount"]
   },
   "filters": [
-    { "field": "Cust_Name", "operator": "LIKE", "value": "A%" },
-    { "field": "StDate", "operator": "BETWEEN", "value": ["2021-04-01", "2022-03-31"] }
+    { "field": "CustomerName", "operator": "LIKE", "value": "A%" }
   ],
-  "sort": [{ "field": "MaximumBill", "direction": "DESC" }],
+  "sort": [{ "field": "TotalAmount", "direction": "DESC" }],
   "pagination": { "page": 1, "pageSize": 25 },
   "filterLogic": "AND"
 }
 ```
 
-The backend resolves `reports/customer`, validates the execution grammar and
-logical fields, converts the integer date, inserts prepared filters at the
-approved stage, and runs server-owned SQL. `queryDefinition` itself is not an API
-property: the frontend translates its reviewed contents into the direct top-level
-request shown above. A resource with no UI controls can omit `execution` entirely.
+Dashboard derives the constrained `execution.columns` list from display columns
+and adds a source placement when a configured filter is not one of those output
+columns. Framework resolves `catalog/customer-summary`, validates the execution
+grammar and logical fields, inserts prepared filters at the approved stage, and
+runs server-owned SQL.
+`queryDefinition` itself is not an API property: Dashboard translates the
+reviewed configuration into the direct request shown above. Complex expressions,
+HAVING mappings, coercions such as integer-date conversion, and resource default
+sorting remain backend-owned. A resource with no UI controls can omit
+`execution` entirely.
 
-## Write form
+The canonical Dashboard configuration shapes are documented in its
+[query-mode guide](https://github.com/sigmasoftwaresolutions/Dashboard/blob/main/docs/QUERY-MODES.md).
 
-For an edit form, submit one object for the target table:
+## Write clients
+
+Dashboard currently has `frontendCapabilities.write: false` and does not expose
+this workflow. Another authorized client can submit one object for the target
+table:
 
 ```json
 {

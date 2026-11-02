@@ -43,7 +43,7 @@ $assetUrl = static fn (string $path): string => htmlspecialchars($parserBase . '
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SQL → API JSON Generator</title><link rel="stylesheet" href="<?= $assetUrl('assets/css/app.css') ?>"></head>
 <body><main>
-<header><p class="eyebrow">Generic SQL REST API Framework · Developer Tool</p><h1>SQL → API JSON Generator</h1><p>Parse SQL into the existing Universal API contract. SQL is analyzed only and never executed.</p></header>
+<header><p class="eyebrow">Framework · Developer Tool</p><h1>SQL → API JSON Generator</h1><p>Parse SQL into the existing Universal API contract. SQL is analyzed only and never executed.</p></header>
 <section class="grid"><article><label for="sql">SQL Input</label><textarea id="sql" spellcheck="false" placeholder="SELECT Item_Code, Item_Desc FROM ItemMasterTable"></textarea><div class="actions"><button id="parse">Parse SQL</button><button id="clear" class="secondary">Clear</button></div></article>
 <article><label for="json">Generated API JSON</label><textarea id="json" spellcheck="false" readonly></textarea><div class="actions"><button id="copy">Copy JSON</button><button id="format" class="secondary">Format JSON</button></div></article></section>
 <section class="analysis"><h2>Analysis / Result</h2><div id="status" class="status idle">Ready</div><dl id="analysis"></dl><ul id="messages"></ul></section>

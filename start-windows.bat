@@ -14,7 +14,7 @@ set "GENERIC_RUNTIME_CONFIG_DIR=%ROOT%\config"
 set "GENERIC_APP_ENV=development"
 
 echo ========================================
-echo          Generic SQL REST API Framework
+echo          Framework
 echo ========================================
 echo.
 

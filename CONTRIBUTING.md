@@ -1,7 +1,9 @@
 # Contributing
 
-This repository is the backend SQL API. Keep frontend, dashboard, and report
-changes in the frontend repository.
+Framework is the SQL Server API backend. Changes must preserve the public JSON
+contract, security boundaries, database-independent testability, and backward
+compatibility unless a migration is explicitly documented. Keep Dashboard and
+report-presentation changes in the frontend repository.
 
 Read the [AI development guide](docs/AI-Development-Guide.md) before changing
 code: it lists the repository boundaries, the security-relevant request flow,
@@ -28,6 +30,7 @@ PHP 8.2 is the CI baseline. Before opening a pull request run:
 php tests/run.php
 php -n tests/run.php
 find api admin app config core database scripts sqlparser tests -type f -name '*.php' -exec php -l {} \;
+git diff --check
 ```
 
 The suite must run without SQL Server, an ODBC extension, credentials, or
@@ -66,9 +69,24 @@ or encryption keys to CI.
 - Add user-visible changes to `CHANGELOG.md` under `[Unreleased]`.
 - Record security findings in
   [docs/security/Security-Verification.md](docs/security/Security-Verification.md).
+- Keep public examples generic and run `php tests/ExampleLibraryTest.php` when
+  examples or their documentation changes.
+- Use relative links inside this repository and the published Dashboard URL for
+  cross-project references.
+- Release preparation must reconcile tags, `CHANGELOG.md`, `README.md`, upgrade
+  guidance, and the roadmap. Dashboard versions remain independent.
+
+## Security reporting
+
+Report suspected vulnerabilities privately to the repository maintainers. Do
+not publish credentials, exploit payloads, private configuration, or customer
+data in issues or pull requests.
 
 ## Pull requests
 
 Include a concise description, the motivation, the tests run, whether a live
 database test was performed, and any public-contract or deployment impact.
-Review `git diff` for unrelated changes.
+Review `git diff` for unrelated changes. Use focused commits following
+`<type>(<scope>): <summary>` where practical. Reviewers should verify API
+compatibility, authorization, input validation, SQL parameterization,
+documentation, examples, and deployment impact before approval.
